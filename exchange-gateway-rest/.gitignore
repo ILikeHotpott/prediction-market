@@ -1,8 +1,0 @@
-target/
-.mvn/
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr

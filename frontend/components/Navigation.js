@@ -56,9 +56,9 @@ export default function Navigation() {
         <div className="flex items-center justify-between h-16">
           <Link href="/" className="flex items-center gap-2 text-white">
             <div className="w-8 h-8 bg-white rounded flex items-center justify-center">
-              <span className="text-[#1e293b] font-bold">P</span>
+              <span className="text-[#1e293b] font-bold">M</span>
             </div>
-            <span className="font-semibold text-lg">Polymarket</span>
+            <span className="font-semibold text-lg">Monofuture</span>
             <span className="text-xs bg-blue-600 px-2 py-0.5 rounded">🇺🇸</span>
           </Link>
 
@@ -67,7 +67,7 @@ export default function Navigation() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search polymarket"
+                placeholder="Search monofuture"
                 className="w-full bg-[#2a3847] text-white pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">

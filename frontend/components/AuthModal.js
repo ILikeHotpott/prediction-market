@@ -83,7 +83,7 @@ export default function AuthModal() {
             <div className="text-sm uppercase tracking-wide text-gray-400">
               {authView === "login" ? "Log In" : "Sign Up"}
             </div>
-            <h2 className="text-2xl font-semibold">Welcome to Polymarket</h2>
+            <h2 className="text-2xl font-semibold">Welcome to Monofuture</h2>
           </div>
           <button
             onClick={closeAuthModal}

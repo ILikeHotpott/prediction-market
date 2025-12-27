@@ -12,6 +12,10 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [authView, setAuthView] = useState("login"); // "login" | "signup"
+  const backendBase =
+    typeof window !== "undefined"
+      ? process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+      : "";
 
   useEffect(() => {
     let isMounted = true;
@@ -39,6 +43,30 @@ export function AuthProvider({ children }) {
       subscription?.unsubscribe();
     };
   }, []);
+
+  // Sync user to backend users table on login
+  useEffect(() => {
+    async function syncUser() {
+      if (!user || !backendBase) return;
+      const profile = user.user_metadata || {};
+      try {
+        await fetch(`${backendBase}/api/users/sync/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: user.id,
+            display_name:
+              profile.full_name || profile.name || profile.username || user.email,
+            avatar_url: profile.avatar_url,
+            role: profile.role, // backend defaults to "user" if missing
+          }),
+        });
+      } catch (_e) {
+        // best-effort; ignore
+      }
+    }
+    syncUser();
+  }, [user, backendBase]);
 
   const openAuthModal = (view = "login") => {
     setAuthView(view);
