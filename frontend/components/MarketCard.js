@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
-import { TrendingUp, TrendingDown } from "lucide-react"
 
 export default function MarketCard({ market }) {
   const outcomeNames = (market.outcomes || []).map((o) => String(o.name || "").trim().toLowerCase())

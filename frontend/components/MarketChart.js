@@ -3,15 +3,35 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
 import { mockChartData } from "@/lib/mockData"
 
-export default function MarketChart() {
+const formatDate = (value) => {
+  if (!value) return "—"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+}
+
+const normalizeId = (id) => (id != null ? String(id) : null)
+
+export default function MarketChart({
+  market,
+  hideOutcomes = false,
+  onSelectOutcome,
+  selectedOptionId,
+  selectedAction,
+}) {
+  const title = market?.title || "Market"
+  const volume = market?.volume_total || "—"
+  const resolution = formatDate(market?.resolution_deadline)
+  const outcomes = (market?.options || []).slice(0, 4)
+
   return (
     <div className="bg-[#1e293b] dark:bg-[#0f172a] rounded-lg border border-gray-700 p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-2">New York City Mayoral Election</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
           <div className="flex items-center gap-4 text-sm text-gray-400">
-            <span>💰 $208,735,575 Vol.</span>
-            <span>📅 Nov 4, 2025</span>
+            <span>💰 {volume || "—"} Vol.</span>
+            <span>📅 {resolution}</span>
           </div>
         </div>
         <div className="flex gap-2">
@@ -20,24 +40,29 @@ export default function MarketChart() {
         </div>
       </div>
 
-      <div className="mb-4 flex gap-4 text-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-          <span className="text-white">Zohran Mamdani 92.8%</span>
+      {!hideOutcomes && (
+        <div className="mb-4 flex gap-4 text-sm flex-wrap">
+          {outcomes.map((o, idx) => {
+            const palette = ["orange", "blue", "gray", "yellow"]
+            const colors = {
+              orange: "bg-orange-500",
+              blue: "bg-blue-500",
+              gray: "bg-gray-500",
+              yellow: "bg-yellow-500",
+            }
+            const cls = colors[palette[idx % palette.length]] || "bg-blue-500"
+            const probability = o.probability ?? (o.probability_bps != null ? Math.round(o.probability_bps / 100) : 0)
+            return (
+              <div key={o.id || idx} className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${cls}`}></div>
+                <span className="text-white">
+                  {o.title} {probability}%
+                </span>
+              </div>
+            )
+          })}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-          <span className="text-white">Andrew Cuomo 5.9%</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-          <span className="text-white">Curtis Sliwa &lt;1%</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-          <span className="text-white">Eric Adams &lt;1%</span>
-        </div>
-      </div>
+      )}
 
       <div className="h-80 mb-4">
         <ResponsiveContainer width="100%" height="100%">
@@ -71,47 +96,62 @@ export default function MarketChart() {
       </div>
 
       {/* Outcome Table */}
-      <div className="border-t border-gray-700 pt-4">
-        <div className="flex items-center justify-between mb-4 text-sm text-gray-400">
-          <span>OUTCOME</span>
-          <span>% CHANCE 🔄</span>
+      {!hideOutcomes && (
+        <div className="border-t border-gray-700 pt-4">
+          <div className="flex items-center justify-between mb-4 text-sm text-gray-400">
+            <span>OUTCOME</span>
+            <span>% CHANCE 🔄</span>
+          </div>
+          
+          <div className="space-y-3">
+            {outcomes.map((o, idx) => {
+              const probability = o.probability ?? (o.probability_bps != null ? Math.round(o.probability_bps / 100) : 0)
+              const yesPrice = o.probability_bps != null ? `${(o.probability_bps / 100).toFixed(1)}¢` : "—"
+              const noPrice =
+                o.probability_bps != null
+                  ? `${((10000 - o.probability_bps) / 100).toFixed(1)}¢`
+                  : "—"
+              return (
+                <OutcomeRow
+                  key={o.id || idx}
+                  id={o.id}
+                  name={o.title}
+                  avatar="📊"
+                  volume="—"
+                  probability={probability}
+                  change={null}
+                  yesPrice={yesPrice}
+                  noPrice={noPrice}
+                  selectedOptionId={selectedOptionId}
+                  selectedAction={selectedAction}
+                  onSelect={(action) => onSelectOutcome?.(o, action)}
+                />
+              )
+            })}
+          </div>
         </div>
-        
-        <div className="space-y-3">
-          <OutcomeRow
-            name="Zohran Mamdani"
-            avatar="👨‍💼"
-            volume="$55,371,840"
-            probability={93}
-            change={1}
-            yesPrice="92.8¢"
-            noPrice="7.3¢"
-          />
-          <OutcomeRow
-            name="Andrew Cuomo"
-            avatar="👔"
-            volume="$13,722,411"
-            probability={6}
-            change={null}
-            yesPrice="6.0¢"
-            noPrice="94.1¢"
-          />
-          <OutcomeRow
-            name="Curtis Sliwa"
-            avatar="👨"
-            volume="$50k"
-            probability={0}
-            change={null}
-            yesPrice="0.5¢"
-            noPrice="99.5¢"
-          />
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
-function OutcomeRow({ name, avatar, volume, probability, change, yesPrice, noPrice }) {
+function OutcomeRow({
+  id,
+  name,
+  avatar,
+  volume,
+  probability,
+  change,
+  yesPrice,
+  noPrice,
+  onSelect,
+  selectedOptionId,
+  selectedAction,
+}) {
+  const isSelected = normalizeId(id) === normalizeId(selectedOptionId)
+  const yesActive = isSelected && selectedAction === "yes"
+  const noActive = isSelected && selectedAction === "no"
+
   return (
     <div className="flex items-center justify-between py-3 border-b border-gray-700 last:border-0">
       <div className="flex items-center gap-3">
@@ -131,10 +171,24 @@ function OutcomeRow({ name, avatar, volume, probability, change, yesPrice, noPri
           )}
         </div>
         <div className="flex gap-2">
-          <button className="w-[180px] py-2 bg-[#3B5355] hover:bg-[#5DA96E] text-[#6BC57B] hover:text-white font-medium rounded transition-colors text-center">
+          <button
+            onClick={() => onSelect?.("yes")}
+            className={`w-[180px] py-2 font-medium rounded transition-colors text-center ${
+              yesActive
+                ? "bg-[#20af64] text-white shadow-[0_8px_20px_rgba(22,163,74,0.35)]"
+                : "bg-[#3B5355] hover:bg-[#5DA96E] text-[#6BC57B] hover:text-white"
+            }`}
+          >
             Buy Yes {yesPrice}
           </button>
-          <button className="w-[180px] py-2 bg-[#4A414D] hover:bg-[#D04740] text-[#D04740] hover:text-white font-medium rounded transition-colors text-center">
+          <button
+            onClick={() => onSelect?.("no")}
+            className={`w-[180px] py-2 font-medium rounded transition-colors text-center ${
+              noActive
+                ? "bg-[#2b3544] text-white"
+                : "bg-[#4A414D] hover:bg-[#D04740] text-[#D04740] hover:text-white"
+            }`}
+          >
             Buy No {noPrice}
           </button>
         </div>

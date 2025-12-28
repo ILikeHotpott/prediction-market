@@ -1,16 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Search, Bell, Menu, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/AuthProvider";
 
+const backendBase =
+  typeof window !== "undefined"
+    ? process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+    : "";
+
 export default function Navigation() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const { theme, setTheme } = useTheme();
   const { user, session, openAuthModal, signOut } = useAuth();
+  const [navPortfolio, setNavPortfolio] = useState(0);
+  const [navCash, setNavCash] = useState(0);
+  const router = useRouter();
 
   const categories = [
     "Trending",
@@ -50,6 +59,34 @@ export default function Navigation() {
 
   const isAuthed = !!session;
 
+  useEffect(() => {
+    async function fetchPortfolio() {
+      if (!backendBase || !user) {
+        setNavPortfolio(0);
+        setNavCash(0);
+        return;
+      }
+      try {
+        const res = await fetch(`${backendBase}/api/users/me/portfolio/`, {
+          headers: { "X-User-Id": user.id },
+          cache: "no-store",
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "failed");
+        const cash = Number(data?.balance?.available_amount || 0);
+        const portfolioValue = Number(data?.portfolio_value || 0);
+        setNavCash(cash);
+        setNavPortfolio(cash + portfolioValue);
+      } catch (_e) {
+        setNavCash(0);
+        setNavPortfolio(0);
+      }
+    }
+    fetchPortfolio();
+  }, [user]);
+
+  const fmt = (n) => `$${Number(n || 0).toFixed(2)}`;
+
   return (
     <nav className="sticky top-0 z-50 bg-[#202b39] border-b border-[#425264]">
       <div className="max-w-[1400px] mx-auto px-12">
@@ -59,7 +96,6 @@ export default function Navigation() {
               <span className="text-[#1e293b] font-bold">M</span>
             </div>
             <span className="font-semibold text-lg">Monofuture</span>
-            <span className="text-xs bg-blue-600 px-2 py-0.5 rounded">🇺🇸</span>
           </Link>
 
           <div className="flex-1 max-w-xl mx-8">
@@ -76,7 +112,7 @@ export default function Navigation() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-5">
             {!isAuthed ? (
               <>
                 <button
@@ -95,19 +131,24 @@ export default function Navigation() {
               </>
             ) : (
               <>
-                <div className="text-right">
-                  <div className="text-xs text-gray-400">Portfolio</div>
-                  <div className="text-sm font-semibold text-green-400">
-                    $0.00
+                <Link href="/portfolio" className="flex items-center gap-5 hover:opacity-90">
+                  <div className="text-left">
+                    <div className="text-[13px] text-gray-300 leading-tight">Portfolio</div>
+                    <div className="text-lg font-semibold text-green-400 leading-tight">
+                      {fmt(navPortfolio)}
+                    </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-400">Cash</div>
-                  <div className="text-sm font-semibold text-green-400">
-                    $0.00
+                  <div className="text-left">
+                    <div className="text-[13px] text-gray-300 leading-tight">Cash</div>
+                    <div className="text-lg font-semibold text-green-400 leading-tight">
+                      {fmt(navCash)}
+                    </div>
                   </div>
-                </div>
-                <Button className="bg-blue-500 hover:bg-blue-600 text-white">
+                </Link>
+                <Button
+                  className="h-10 px-6 bg-blue-500 hover:bg-blue-600 text-white"
+                  onClick={() => router.push("/portfolio")}
+                >
                   Deposit
                 </Button>
                 <Bell className="w-5 h-5 text-gray-400 cursor-pointer hover:text-white" />
