@@ -115,7 +115,7 @@ def portfolio(request):
     available = balance.available_amount if balance else Decimal(0)
 
     positions = (
-        Position.objects.select_related("market", "option", "option__stats")
+        Position.objects.select_related("market", "market__event", "option", "option__stats")
         .filter(user=user)
         .order_by("-updated_at")
     )
@@ -132,6 +132,7 @@ def portfolio(request):
             {
                 "market_id": str(pos.market_id),
                 "market_title": pos.market.title,
+                "event_title": pos.market.event.title if pos.market and pos.market.event else None,
                 "option_id": pos.option_id,
                 "option_title": pos.option.title,
                 "probability_bps": prob_bps,
@@ -164,11 +165,24 @@ def order_history(request):
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
-    intents = (
+    try:
+        page = max(int(request.GET.get("page", 1)), 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(request.GET.get("page_size", 10))
+    except (TypeError, ValueError):
+        page_size = 10
+    page_size = max(1, min(page_size, 100))
+    offset = (page - 1) * page_size
+
+    base_qs = (
         OrderIntent.objects.select_related("market", "option")
         .filter(user=user)
-        .order_by("-created_at")[:200]
+        .order_by("-created_at")
     )
+    total = base_qs.count()
+    intents = base_qs[offset : offset + page_size]
     items = []
     for intent in intents:
         prob_bps = None
@@ -195,5 +209,8 @@ def order_history(request):
             }
         )
 
-    return JsonResponse({"items": items}, status=200)
+    return JsonResponse(
+        {"items": items, "page": page, "page_size": page_size, "total": total},
+        status=200,
+    )
 

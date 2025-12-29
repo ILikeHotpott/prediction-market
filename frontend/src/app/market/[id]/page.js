@@ -14,7 +14,8 @@ export default function MarketDetail({ params }) {
   const routeParams = useParams()
   const { user, openAuthModal } = useAuth()
   const [marketId, setMarketId] = useState(null)
-  const [market, setMarket] = useState(null)
+  const [eventData, setEventData] = useState(null)
+  const [selectedMarketId, setSelectedMarketId] = useState(null)
   const [selectedOptionId, setSelectedOptionId] = useState(null)
   const [amount, setAmount] = useState("0")
   const [side, setSide] = useState("buy")
@@ -26,17 +27,29 @@ export default function MarketDetail({ params }) {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [balance, setBalance] = useState(null)
+  const [positionsMap, setPositionsMap] = useState({})
+
+  const marketsSorted = useMemo(() => {
+    return (eventData?.markets || [])
+      .slice()
+      .sort((a, b) => (a.sort_weight ?? 0) - (b.sort_weight ?? 0) || (a.created_at || "").localeCompare(b.created_at || ""))
+  }, [eventData])
+
+  const selectedMarket = useMemo(() => {
+    if (!eventData || !selectedMarketId) return null
+    return (eventData.markets || []).find((m) => normalizeId(m.id) === normalizeId(selectedMarketId)) || null
+  }, [eventData, selectedMarketId])
 
   const optionsSorted = useMemo(() => {
-    return (market?.options || []).slice().sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))
-  }, [market])
+    return (selectedMarket?.options || []).slice().sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))
+  }, [selectedMarket])
 
   const isBinary = useMemo(() => {
     if (!optionsSorted.length) return false
-    if (market?.is_binary) return true
+    if (selectedMarket?.is_binary) return true
     if (optionsSorted.length === 2) return true
     return false
-  }, [optionsSorted, market])
+  }, [optionsSorted, selectedMarket])
 
   useEffect(() => {
     let active = true
@@ -52,27 +65,46 @@ export default function MarketDetail({ params }) {
 
   useEffect(() => {
     if (!marketId) return
-    fetchMarket(marketId)
+    fetchEvent(marketId)
   }, [marketId])
+
+  useEffect(() => {
+    // when switching market, pick a sensible default option (prefer YES)
+    if (!selectedMarket) return
+    const yes = (selectedMarket.options || []).find((o) => (o.side || "").toLowerCase() === "yes")
+    const first = (selectedMarket.options || [])[0]
+    const target = yes || first || null
+    if (target) {
+      setSelectedOptionId(normalizeId(target.id))
+      setOutcomeAction("yes")
+      setSide("buy")
+    }
+  }, [selectedMarket])
 
   useEffect(() => {
     if (user) {
       fetchBalance()
+      fetchPositions()
     } else {
       setBalance(null)
+      setPositionsMap({})
     }
   }, [user])
 
-  async function fetchMarket(id) {
+  async function fetchEvent(id) {
     setLoading(true)
     setError("")
     setSuccess("")
     try {
-      const res = await fetch(`${backendBase}/api/markets/${id}/`, { cache: "no-store" })
+      const res = await fetch(`${backendBase}/api/events/${id}/`, { cache: "no-store" })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to load market")
-      setMarket(data)
-      const firstOption = (data.options || []).sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))[0]
+      if (!res.ok) throw new Error(data.error || "Failed to load event")
+      setEventData(data)
+      const primaryMarketId = data.primary_market_id || data.primary_market?.id || data.markets?.[0]?.id
+      setSelectedMarketId(normalizeId(primaryMarketId))
+      const firstMarket = (data.markets || []).find((m) => normalizeId(m.id) === normalizeId(primaryMarketId)) || data.markets?.[0]
+      const firstOption =
+        (firstMarket?.options || []).sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))[0]
       setSelectedOptionId(normalizeId(firstOption?.id))
     } catch (e) {
       setError(e.message || "加载失败")
@@ -95,33 +127,89 @@ export default function MarketDetail({ params }) {
     }
   }
 
-  const selectedOption = useMemo(() => {
-    return (market?.options || []).find((o) => normalizeId(o.id) === normalizeId(selectedOptionId)) || null
-  }, [market, selectedOptionId])
+  async function fetchPositions() {
+    if (!user) return
+    try {
+      const res = await fetch(`${backendBase}/api/users/me/portfolio/`, {
+        headers: { "X-User-Id": user.id },
+        cache: "no-store",
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to load positions")
+      const map = {}
+      ;(data.positions || []).forEach((p) => {
+        const id = normalizeId(p.option_id)
+        if (!id) return
+        const num = Number(p.shares || 0)
+        map[id] = Number.isFinite(num) ? num : 0
+      })
+      setPositionsMap(map)
+    } catch (_e) {
+      // ignore silently for now
+    }
+  }
 
-  const panelTitle = selectedOption?.title || market?.title
+  const selectedOption = useMemo(() => {
+    return (selectedMarket?.options || []).find((o) => normalizeId(o.id) === normalizeId(selectedOptionId)) || null
+  }, [selectedMarket, selectedOptionId])
+
+  const panelTitle = selectedOption?.title || selectedMarket?.title || eventData?.title
 
   const normalizedSelectedId = normalizeId(selectedOptionId)
 
   const yesOption = useMemo(() => {
     if (!optionsSorted.length) return null
-    return optionsSorted.find((o) => String(o.title || "").toLowerCase() === "yes") || optionsSorted[0]
+    return (
+      optionsSorted.find((o) => (o.side || "").toLowerCase() === "yes") ||
+      optionsSorted.find((o) => String(o.title || "").toLowerCase() === "yes") ||
+      optionsSorted[0]
+    )
   }, [optionsSorted])
 
   const noOption = useMemo(() => {
     if (!optionsSorted.length) return null
     if (optionsSorted.length === 1) return null
-    const explicitNo = optionsSorted.find((o) => String(o.title || "").toLowerCase() === "no")
+    const explicitNo =
+      optionsSorted.find((o) => (o.side || "").toLowerCase() === "no") ||
+      optionsSorted.find((o) => String(o.title || "").toLowerCase() === "no")
     if (explicitNo) return explicitNo
     const yesId = normalizeId(yesOption?.id)
     return optionsSorted.find((o) => normalizeId(o.id) !== yesId) || null
   }, [optionsSorted, yesOption])
 
+  // Keep selected option aligned with chosen action (yes/no) so orders use correct leg
+  useEffect(() => {
+    if (!optionsSorted.length) return
+    if (outcomeAction === "no") {
+      const target = noOption || optionsSorted[1] || optionsSorted[0]
+      if (target && normalizeId(selectedOptionId) !== normalizeId(target.id)) {
+        setSelectedOptionId(normalizeId(target.id))
+      }
+    } else {
+      const target = yesOption || optionsSorted[0]
+      if (target && normalizeId(selectedOptionId) !== normalizeId(target.id)) {
+        setSelectedOptionId(normalizeId(target.id))
+      }
+    }
+  }, [outcomeAction, optionsSorted, yesOption, noOption, selectedOptionId])
+
   const selectOption = (opt, action = outcomeAction) => {
     if (!opt) return
     setSelectedOptionId(normalizeId(opt.id))
     setOutcomeAction(action)
-    setSide("buy")
+  }
+
+  const selectMarket = (marketObj, action = "yes") => {
+    if (!marketObj) return
+    setSelectedMarketId(normalizeId(marketObj.id))
+    const yes = (marketObj.options || []).find((o) => (o.side || "").toLowerCase() === "yes")
+    const no = (marketObj.options || []).find((o) => (o.side || "").toLowerCase() === "no")
+    const fallback = (marketObj.options || [])[0]
+    const target = action === "no" ? no || fallback : yes || fallback
+    if (target) {
+      setSelectedOptionId(normalizeId(target.id))
+    }
+    setOutcomeAction(action)
   }
 
   const price = useMemo(() => {
@@ -151,6 +239,23 @@ export default function MarketDetail({ params }) {
     toWinValue > 0
       ? `$${toWinValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : "$0.00"
+  const proceedsLabel = `$${potentialProceeds.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+  const summaryTitle = isSell ? "You'll receive" : "To win"
+  const summaryValueLabel = isSell ? proceedsLabel : toWinLabel
+  const summarySubLabel = `Avg. Price ${avgPriceLabel}`
+  const userSharesForOption = (opt) => {
+    const id = normalizeId(opt?.id)
+    if (!id) return 0
+    const val = Number(positionsMap[id])
+    return Number.isFinite(val) ? val : 0
+  }
+  const formattedSharesLabel = (opt) => {
+    const s = userSharesForOption(opt)
+    return `${s.toFixed(2)} shares`
+  }
 
   const handleAmountPreset = (delta) => {
     setAmount((prev) => {
@@ -163,6 +268,10 @@ export default function MarketDetail({ params }) {
   const handlePlaceOrder = async () => {
     if (!user) {
       openAuthModal("login")
+      return
+    }
+    if (!selectedMarket) {
+      setError("未找到可交易的子市场")
       return
     }
     if (!selectedOption) {
@@ -192,8 +301,8 @@ export default function MarketDetail({ params }) {
         typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : undefined
       const isSellSide = side === "sell"
       const endpoint = isSellSide
-        ? `${backendBase}/api/markets/${market.id}/orders/sell/`
-        : `${backendBase}/api/markets/${market.id}/orders/buy/`
+        ? `${backendBase}/api/markets/${selectedMarket.id}/orders/sell/`
+        : `${backendBase}/api/markets/${selectedMarket.id}/orders/buy/`
       const body = isSellSide
         ? {
             shares: String(amountNum),
@@ -223,6 +332,14 @@ export default function MarketDetail({ params }) {
         available_amount: data.balance_available,
         locked_amount: balance?.locked_amount ?? "0",
       })
+      const optId = normalizeId(data.option_id || selectedOption.id)
+      if (optId && data.position?.shares != null) {
+        const sharesNum = Number(data.position.shares)
+        setPositionsMap((prev) => ({
+          ...prev,
+          [optId]: Number.isFinite(sharesNum) ? sharesNum : prev[optId] || 0,
+        }))
+      }
     } catch (e) {
       setError(e.message || "下单失败")
     } finally {
@@ -245,110 +362,69 @@ export default function MarketDetail({ params }) {
       : noPriceCents
   const displayYesPrice = selectedYesPriceCents != null ? `${selectedYesPriceCents}¢` : "—"
   const displayNoPrice = selectedNoPriceCents != null ? `${selectedNoPriceCents}¢` : "—"
-  const balanceLabel = balance ? `$${Number(balance.available_amount || 0).toFixed(2)}` : "$0.00"
-  const selectedLabel = selectedOption?.title || "Yes"
+  const selectedLabel =
+    selectedMarket?.bucket_label ||
+    selectedMarket?.title ||
+    selectedOption?.title ||
+    "Option"
   const actionLabel = outcomeAction === "no" ? "No" : "Yes"
-  const showOutcomeList = optionsSorted.length > 2
+  const isStandaloneEvent = (eventData?.group_rule || "").toLowerCase() === "standalone"
+  const hideOutcomes = isStandaloneEvent
 
   return (
     <div className="min-h-screen bg-[#0f172a]">
       <Navigation />
-      <div className="max-w-[1400px] mx-auto px-4 py-6">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6">
         {loading && (
           <div className="py-10">
             <LoadingSpinner />
           </div>
         )}
         {!loading && error && <div className="text-red-400 mb-4">{error}</div>}
-        {!loading && market && (
+        {!loading && eventData && selectedMarket && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Chart Area */}
             <div className="lg:col-span-2 space-y-6">
               <MarketChart
-                market={market}
+                market={selectedMarket}
+                eventTitle={eventData?.title}
+                markets={marketsSorted}
+                hideOutcomes={hideOutcomes}
                 onSelectOutcome={selectOption}
+                onSelectMarket={selectMarket}
                 selectedOptionId={selectedOptionId}
                 selectedAction={outcomeAction}
               />
-              {showOutcomeList && (
-                <div className="bg-[#0f1c2d] rounded-2xl border border-[#1f2e45] shadow-[0_12px_30px_rgba(0,0,0,0.35)] p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-white font-semibold">Outcome</div>
-                    <div className="text-white font-semibold">% Chance</div>
-                    <div className="text-white font-semibold text-right flex-1">Actions</div>
-                  </div>
-                  <div className="space-y-2">
-                    {optionsSorted.map((opt) => {
-                      const normId = normalizeId(opt.id)
-                      const prob = opt.probability_bps != null ? opt.probability_bps / 100 : null
-                      const yesPrice = prob != null ? `${(prob).toFixed(1)}¢` : "—"
-                      const noPrice = prob != null ? `${(100 - prob).toFixed(1)}¢` : "—"
-                      const isSelected = normalizedSelectedId === normId
-                      const chanceLabel = prob != null ? `${prob.toFixed(0)}%` : "—"
-                      return (
-                        <div
-                          key={opt.id}
-                          className={`grid grid-cols-[1.5fr_0.6fr_1fr] items-center gap-4 px-4 py-3 rounded-xl border ${
-                            isSelected ? "border-[#2b9ef8]" : "border-[#1f2e45]"
-                          } bg-[#0c1624]`}
-                        >
-                          <div className="text-white font-semibold">{opt.title}</div>
-                          <div className="text-white text-2xl font-bold text-center">{chanceLabel}</div>
-                          <div className="flex justify-end gap-3">
-                            <button
-                              onClick={() => selectOption(opt, "yes")}
-                              className={`px-4 py-2 rounded-lg text-white font-semibold text-sm transition-all ${
-                                isSelected && outcomeAction === "yes"
-                                  ? "bg-[#20af64] shadow-[0_8px_20px_rgba(22,163,74,0.35)]"
-                                  : "bg-[#1d3c2e] text-white/90 hover:bg-[#20af64]"
-                              }`}
-                            >
-                              Yes {yesPrice}
-                            </button>
-                            <button
-                              onClick={() => selectOption(opt, "no")}
-                              className={`px-4 py-2 rounded-lg text-white font-semibold text-sm transition-all ${
-                                isSelected && outcomeAction === "no"
-                                  ? "bg-[#2b3544]"
-                                  : "bg-[#1c2533] text-white/70 hover:bg-[#2b3544]"
-                              }`}
-                            >
-                              No {noPrice}
-                            </button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-              <Comments />
+
+              <Comments marketId={selectedMarket?.id} user={user} openAuthModal={openAuthModal} />
             </div>
 
             {/* Sidebar */}
             <div className="space-y-6">
               {/* Trade Panel */}
               <div className="bg-[#0d1c2c] dark:bg-[#0f172a] rounded-2xl border border-[#1f2e45] shadow-[0_20px_40px_rgba(0,0,0,0.45)] p-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#24344a] border border-[#1f2e45] flex-shrink-0">
-                    {market?.cover_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={market.cover_url}
-                        alt={panelTitle || "Market"}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-2xl">📈</div>
-                    )}
+                {!isStandaloneEvent && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#24344a] border border-[#1f2e45] flex-shrink-0">
+                      {selectedMarket?.cover_url || eventData?.cover_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={selectedMarket?.cover_url || eventData?.cover_url}
+                          alt={panelTitle || eventData?.title || "Market"}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-2xl">📈</div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-white text-xl font-semibold leading-tight truncate">
+                        {selectedMarket?.bucket_label || selectedMarket?.title || panelTitle}
+                      </h3>
+                      <div className="text-gray-400 text-xs truncate">{eventData?.title}</div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-white text-xl font-semibold leading-tight truncate">{panelTitle}</h3>
-                  </div>
-                  <div className="text-white font-semibold text-lg flex items-center gap-2">
-                    Market <span className="text-xl">▾</span>
-                  </div>
-                </div>
+                )}
 
                 {/* Buy/Sell Tabs */}
                 <div className="flex gap-6 mt-6 border-b border-[#1d2c3f]">
@@ -372,38 +448,59 @@ export default function MarketDetail({ params }) {
 
                 {/* Options */}
                 <div className="grid grid-cols-2 gap-3 mt-6">
-                  <button
-                    onClick={() => {
-                      const target = selectedOption || yesOption || optionsSorted[0]
-                      selectOption(target, "yes")
-                    }}
-                    className={`h-16 rounded-xl text-white text-2xl font-semibold transition-all ${
-                      outcomeAction === "yes"
-                        ? "bg-[#20af64] shadow-[0_10px_30px_rgba(22,163,74,0.35)]"
-                        : "bg-[#1d3c2e] text-white/90 hover:bg-[#20af64]"
-                    }`}
-                  >
-                    Yes {displayYesPrice}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const target = selectedOption || noOption || optionsSorted[1] || optionsSorted[0]
-                      selectOption(target, "no")
-                    }}
-                    className={`h-16 rounded-xl text-white text-2xl font-semibold transition-all ${
-                      outcomeAction === "no"
-                        ? "bg-[#2b3544] text-white"
-                        : "bg-[#1c2533] text-white/70 hover:bg-[#2b3544]"
-                    }`}
-                  >
-                    No {displayNoPrice}
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => {
+                        const target = yesOption || selectedOption || optionsSorted[0]
+                        selectOption(target, "yes")
+                      }}
+                      className={`h-16 rounded-xl text-white text-2xl font-semibold transition-all ${
+                        outcomeAction === "yes"
+                          ? "bg-[#20af64] shadow-[0_10px_30px_rgba(22,163,74,0.35)]"
+                          : "bg-[#1d3c2e] text-white/90 hover:bg-[#20af64]"
+                      }`}
+                    >
+                      Yes {displayYesPrice}
+                    </button>
+                    {side === "sell" && yesOption && userSharesForOption(yesOption) > 0 && (
+                      <div
+                        className={`text-center text-sm ${
+                          outcomeAction === "yes" ? "text-green-300" : "text-gray-400"
+                        }`}
+                      >
+                        {formattedSharesLabel(yesOption)}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      onClick={() => {
+                        const target = noOption || selectedOption || optionsSorted[1] || optionsSorted[0]
+                        selectOption(target, "no")
+                      }}
+                      className={`h-16 rounded-xl text-white text-2xl font-semibold transition-all ${
+                        outcomeAction === "no"
+                          ? "bg-[#b91c1c] text-white shadow-[0_10px_30px_rgba(185,28,28,0.35)]"
+                          : "bg-[#1c2533] text-white/70 hover:bg-[#b91c1c]"
+                      }`}
+                    >
+                      No {displayNoPrice}
+                    </button>
+                    {side === "sell" && noOption && userSharesForOption(noOption) > 0 && (
+                      <div
+                        className={`text-center text-sm ${
+                          outcomeAction === "no" ? "text-red-300" : "text-gray-400"
+                        }`}
+                      >
+                        {formattedSharesLabel(noOption)}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Amount */}
                 <div className="mt-8 space-y-3">
                   <div className="text-white text-2xl font-semibold">{side === "buy" ? "Amount" : "Shares"}</div>
-                  <div className="text-gray-400 text-sm">Balance {balanceLabel}</div>
 
                   <div className="relative">
                     {side === "buy" && (
@@ -482,14 +579,14 @@ export default function MarketDetail({ params }) {
                   <div className="mt-6 border-t border-[#1d2c3f] pt-4">
                     <div className="flex items-center justify-between text-lg text-gray-300">
                       <span className="flex items-center gap-2">
-                        To win <span role="img" aria-label="money">💵</span>
+                        {summaryTitle} <span role="img" aria-label="money">💵</span>
                       </span>
                       <span className="text-3xl font-semibold text-green-400">
-                        {isSell ? `$${potentialProceeds.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : toWinLabel}
+                        {summaryValueLabel}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-400 mt-2">
-                      <span>{isSell ? "Est. Proceeds" : `Avg. Price ${avgPriceLabel}`}</span>
+                      <span>{summarySubLabel}</span>
                     </div>
                   </div>
                 )}

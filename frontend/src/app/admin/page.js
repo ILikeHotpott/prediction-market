@@ -11,8 +11,13 @@ const backendBase =
 export default function AdminMarketsPage() {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [markets, setMarkets] = useState([]);
+  const [events, setEvents] = useState([]);
   const [userRole, setUserRole] = useState(null);
+  const defaultStandaloneMarkets = [{ title: "Primary", sort_weight: 0 }];
+  const defaultMultiMarkets = [
+    { title: "Yes", sort_weight: 0 },
+    { title: "No", sort_weight: 1 },
+  ];
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -22,23 +27,19 @@ export default function AdminMarketsPage() {
     slug: "",
     chain: "",
     cover_url: "",
-    options: [
-      { title: "Yes", option_index: 0 },
-      { title: "No", option_index: 1 },
-    ],
+    group_rule: "standalone",
+    markets: defaultStandaloneMarkets,
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const validToSubmit = useMemo(
-    () =>
-      form.title &&
-      form.description &&
-      form.trading_deadline &&
-      Array.isArray(form.options) &&
-      form.options.filter((o) => o.title?.trim()).length >= 2,
-    [form],
-  );
+  const validToSubmit = useMemo(() => {
+    const requiredMarkets = form.group_rule === "standalone" ? 1 : 2;
+    const marketsValid =
+      Array.isArray(form.markets) &&
+      form.markets.filter((o) => o.title?.trim()).length >= requiredMarkets;
+    return form.title && form.description && form.trading_deadline && marketsValid;
+  }, [form]);
 
   useEffect(() => {
     if (!user) return;
@@ -51,7 +52,7 @@ export default function AdminMarketsPage() {
 
   useEffect(() => {
     if (userRole === "admin") {
-      fetchMarkets();
+      fetchEvents();
     }
   }, [userRole]);
 
@@ -74,47 +75,63 @@ export default function AdminMarketsPage() {
     }
   }
 
-  async function fetchMarkets() {
+  async function fetchEvents() {
     setError("");
     try {
-      const res = await fetch(`${backendBase}/api/markets/?all=1`, {
+      const res = await fetch(`${backendBase}/api/events/?all=1`, {
         cache: "no-store",
         headers: user ? { "X-User-Id": user.id } : {},
       });
       const data = await res.json();
-      setMarkets(Array.isArray(data.items) ? data.items : []);
+      setEvents(Array.isArray(data.items) ? data.items : []);
     } catch (err) {
-      setError("加载市场列表失败");
+      setError("加载事件列表失败");
     }
   }
 
   function handleChange(field, value) {
+    if (field === "group_rule") {
+      if (value === "standalone") {
+        setForm((prev) => ({
+          ...prev,
+          group_rule: value,
+          markets: defaultStandaloneMarkets,
+        }));
+      } else {
+        setForm((prev) => {
+          const nextMarkets =
+            (prev.markets || []).length >= 2 ? prev.markets : defaultMultiMarkets;
+          return { ...prev, group_rule: value, markets: nextMarkets };
+        });
+      }
+      return;
+    }
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  function handleOptionChange(idx, field, value) {
+  function handleMarketChange(idx, field, value) {
     setForm((prev) => {
-      const next = [...(prev.options || [])];
+      const next = [...(prev.markets || [])];
       next[idx] = { ...next[idx], [field]: value };
-      return { ...prev, options: next };
+      return { ...prev, markets: next };
     });
   }
 
-  function addOption() {
+  function addMarket() {
     setForm((prev) => ({
       ...prev,
-      options: [
-        ...(prev.options || []),
-        { title: "", option_index: (prev.options?.length || 0) },
+      markets: [
+        ...(prev.markets || []),
+        { title: "", sort_weight: (prev.markets?.length || 0) },
       ],
     }));
   }
 
-  function removeOption(idx) {
+  function removeMarket(idx) {
     setForm((prev) => {
-      const next = [...(prev.options || [])];
+      const next = [...(prev.markets || [])];
       next.splice(idx, 1);
-      return { ...prev, options: next };
+      return { ...prev, markets: next };
     });
   }
 
@@ -125,7 +142,7 @@ export default function AdminMarketsPage() {
     setError("");
     setSuccess("");
     try {
-      const res = await fetch(`${backendBase}/api/markets/create/`, {
+      const res = await fetch(`${backendBase}/api/events/create/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -133,8 +150,17 @@ export default function AdminMarketsPage() {
         },
         body: JSON.stringify({
           ...form,
-          options: (form.options || []).map((o) => ({
-            title: o.title,
+          group_rule: form.group_rule || "standalone",
+          markets: (form.markets || []).map((m, idx) => ({
+            title: m.title,
+            bucket_label: m.bucket_label,
+            sort_weight: m.sort_weight ?? idx,
+            trading_deadline: form.trading_deadline,
+            resolution_deadline: form.resolution_deadline,
+            options: [
+              { title: "NO", side: "no", option_index: 0 },
+              { title: "YES", side: "yes", option_index: 1 },
+            ],
           })),
         }),
       });
@@ -152,12 +178,10 @@ export default function AdminMarketsPage() {
           slug: "",
           chain: "",
           cover_url: "",
-          options: [
-            { title: "Yes", option_index: 0 },
-            { title: "No", option_index: 1 },
-          ],
+          group_rule: "standalone",
+          markets: defaultStandaloneMarkets,
         });
-        fetchMarkets();
+        fetchEvents();
       }
     } catch (err) {
       setError("创建失败");
@@ -170,7 +194,7 @@ export default function AdminMarketsPage() {
     setError("");
     setSuccess("");
     try {
-      const res = await fetch(`${backendBase}/api/markets/${id}/publish/`, {
+      const res = await fetch(`${backendBase}/api/events/${id}/publish/`, {
         method: "POST",
         headers: user ? { "X-User-Id": user.id } : {},
       });
@@ -179,7 +203,7 @@ export default function AdminMarketsPage() {
         setError(data.error || "发布失败");
       } else {
         setSuccess("发布成功");
-        fetchMarkets();
+        fetchEvents();
       }
     } catch (err) {
       setError("发布失败");
@@ -190,7 +214,7 @@ export default function AdminMarketsPage() {
     setError("");
     setSuccess("");
     try {
-      const res = await fetch(`${backendBase}/api/markets/${id}/status/`, {
+      const res = await fetch(`${backendBase}/api/events/${id}/status/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -203,7 +227,7 @@ export default function AdminMarketsPage() {
         setError(data.error || "更新状态失败");
       } else {
         setSuccess("状态已更新");
-        fetchMarkets();
+        fetchEvents();
       }
     } catch (err) {
       setError("更新状态失败");
@@ -227,7 +251,7 @@ export default function AdminMarketsPage() {
         {userRole === "admin" ? (
           <>
         <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">创建新市场（draft）</h2>
+          <h2 className="text-xl font-semibold mb-4">创建新事件（draft）</h2>
           <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={handleCreate}>
             <div className="md:col-span-2">
               <label className="text-sm text-gray-300">标题 *</label>
@@ -286,6 +310,18 @@ export default function AdminMarketsPage() {
               />
             </div>
             <div>
+              <label className="text-sm text-gray-300">Group Rule</label>
+              <select
+                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                value={form.group_rule}
+                onChange={(e) => handleChange("group_rule", e.target.value)}
+              >
+                <option value="standalone">Standalone（单个子市场，Yes/No）</option>
+                <option value="exclusive">Exclusive（多个子市场，仅选一个答案）</option>
+                <option value="independent">Independent（多个子市场，可多选）</option>
+              </select>
+            </div>
+            <div>
               <label className="text-sm text-gray-300">交易截止时间 *</label>
               <input
                 type="datetime-local"
@@ -313,49 +349,55 @@ export default function AdminMarketsPage() {
               {success && <span className="text-green-400">{success}</span>}
             </div>
           </form>
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-semibold">选项（至少 2 个）</h3>
-              <Button variant="outline" size="sm" onClick={addOption}>
-                添加选项
-              </Button>
+          {form.group_rule === "standalone" ? (
+            <div className="mt-6 text-sm text-gray-300">
+              Standalone 模式下将自动创建一个二元市场（Yes / No），无需添加子市场。
             </div>
-            <div className="space-y-3">
-              {(form.options || []).map((opt, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-[#0f172a] border border-[#334155] rounded-lg p-3"
-                >
-                  <div className="md:col-span-9">
-                    <label className="text-xs text-gray-400">标题 *</label>
-                    <input
-                      className="w-full mt-1 bg-[#111827] border border-[#1f2937] rounded-lg p-2 text-white"
-                      value={opt.title}
-                      onChange={(e) => handleOptionChange(idx, "title", e.target.value)}
-                      placeholder={`Option ${idx + 1}`}
-                      required
-                    />
+          ) : (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-semibold">子市场（至少 2 个）</h3>
+                <Button variant="outline" size="sm" onClick={addMarket}>
+                  添加子市场
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {(form.markets || []).map((opt, idx) => (
+                  <div
+                    key={idx}
+                    className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-[#0f172a] border border-[#334155] rounded-lg p-3"
+                  >
+                    <div className="md:col-span-9">
+                      <label className="text-xs text-gray-400">子市场标题 *</label>
+                      <input
+                        className="w-full mt-1 bg-[#111827] border border-[#1f2937] rounded-lg p-2 text-white"
+                        value={opt.title}
+                        onChange={(e) => handleMarketChange(idx, "title", e.target.value)}
+                        placeholder={`子市场 ${idx + 1}`}
+                        required
+                      />
+                    </div>
+                    <div className="md:col-span-3 flex justify-end">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={(form.markets || []).length <= 2}
+                        onClick={() => removeMarket(idx)}
+                      >
+                        删除
+                      </Button>
+                    </div>
                   </div>
-                  <div className="md:col-span-3 flex justify-end">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={(form.options || []).length <= 2}
-                      onClick={() => removeOption(idx)}
-                    >
-                      删除
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </section>
 
         <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">市场列表</h2>
-            <Button variant="outline" onClick={fetchMarkets}>
+            <h2 className="text-xl font-semibold">事件列表</h2>
+            <Button variant="outline" onClick={fetchEvents}>
               刷新
             </Button>
           </div>
@@ -365,19 +407,23 @@ export default function AdminMarketsPage() {
                 <tr className="text-left">
                   <th className="p-2">标题</th>
                   <th className="p-2">状态</th>
+                  <th className="p-2">子市场</th>
                   <th className="p-2">交易截止</th>
                   <th className="p-2">Slug</th>
                   <th className="p-2">操作</th>
                 </tr>
               </thead>
               <tbody>
-                {markets.map((m) => (
+                {events.map((m) => (
                   <tr key={m.id} className="border-t border-[#334155]">
                     <td className="p-2">{m.title}</td>
                     <td className="p-2">
                       <span className="px-2 py-1 bg-[#0f172a] rounded">
                         {m.status}
                       </span>
+                    </td>
+                    <td className="p-2 text-gray-300">
+                      {(m.markets || []).length}
                     </td>
                     <td className="p-2 text-gray-300">
                       {m.trading_deadline
@@ -432,10 +478,10 @@ export default function AdminMarketsPage() {
                     </td>
                   </tr>
                 ))}
-                {!markets.length && (
+                {!events.length && (
                   <tr>
-                    <td className="p-4 text-gray-400" colSpan={5}>
-                      暂无市场
+                    <td className="p-4 text-gray-400" colSpan={6}>
+                      暂无事件
                     </td>
                   </tr>
                 )}

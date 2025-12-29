@@ -14,15 +14,33 @@ const normalizeId = (id) => (id != null ? String(id) : null)
 
 export default function MarketChart({
   market,
+  eventTitle,
+  markets = [],
   hideOutcomes = false,
   onSelectOutcome,
+  onSelectMarket,
   selectedOptionId,
   selectedAction,
 }) {
-  const title = market?.title || "Market"
+  const title = eventTitle || market?.title || "Market"
   const volume = market?.volume_total || "—"
   const resolution = formatDate(market?.resolution_deadline)
-  const outcomes = (market?.options || []).slice(0, 4)
+  const outcomeMarkets = (markets || []).length ? markets : []
+  const outcomes = outcomeMarkets.length
+    ? outcomeMarkets.map((m) => {
+        const yesOption =
+          (m.options || []).find((o) => (o.side || "").toLowerCase() === "yes") ||
+          (m.options || []).find((o) => String(o.title || "").toLowerCase() === "yes")
+        const probability_bps = yesOption?.probability_bps
+        return {
+          id: m.id,
+          title: m.bucket_label || m.title,
+          probability_bps,
+          probability: probability_bps != null ? Math.round(probability_bps / 100) : undefined,
+          _market: m,
+        }
+      })
+    : (market?.options || []).slice(0, 4)
 
   return (
     <div className="bg-[#1e293b] dark:bg-[#0f172a] rounded-lg border border-gray-700 p-6">
@@ -111,6 +129,7 @@ export default function MarketChart({
                 o.probability_bps != null
                   ? `${((10000 - o.probability_bps) / 100).toFixed(1)}¢`
                   : "—"
+              const isMarketRow = Boolean(o._market)
               return (
                 <OutcomeRow
                   key={o.id || idx}
@@ -124,7 +143,11 @@ export default function MarketChart({
                   noPrice={noPrice}
                   selectedOptionId={selectedOptionId}
                   selectedAction={selectedAction}
-                  onSelect={(action) => onSelectOutcome?.(o, action)}
+                  onSelect={(action) =>
+                    isMarketRow && onSelectMarket
+                      ? onSelectMarket(o._market, action)
+                      : onSelectOutcome?.(o, action)
+                  }
                 />
               )
             })}

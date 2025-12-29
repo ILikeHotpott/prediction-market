@@ -12,8 +12,8 @@ export default function FilterBar() {
 
   return (
     <div className="bg-background border-[#425264] py-4 mb-2">
-      <div className="max-w-[1400px] mx-auto px-12">
-        <div className="flex items-center gap-4 overflow-x-auto scrollbar-hide">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12">
+        <div className="flex items-center gap-3 sm:gap-4 overflow-x-auto scrollbar-hide">
           <button className="text-gray-400 hover:text-white transition-colors flex-shrink-0">
             ⚙️
           </button>

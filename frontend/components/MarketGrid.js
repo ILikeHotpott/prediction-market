@@ -20,11 +20,15 @@ export default function MarketGrid() {
     setLoading(true)
     setError("")
     try {
-      const res = await fetch(`${backendBase}/api/markets/`, { cache: "no-store" })
+      const res = await fetch(`${backendBase}/api/events/`, { cache: "no-store" })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to load markets")
-      const normalized = (data.items || []).map((m) => {
-        const outcomes = (m.options || []).map((o) => ({
+      if (!res.ok) throw new Error(data.error || "Failed to load events")
+      const normalized = (data.items || []).map((evt) => {
+        const primaryMarket =
+          evt.primary_market ||
+          (evt.markets || []).find((m) => String(m.id) === String(evt.primary_market_id)) ||
+          (evt.markets || [])[0]
+        const outcomes = (primaryMarket?.options || []).map((o) => ({
           name: o.title,
           probability: o.probability ?? (o.probability_bps != null ? Math.round(o.probability_bps / 100) : 0),
         }))
@@ -34,15 +38,17 @@ export default function MarketGrid() {
         const yesOption = outcomes.find((o) => String(o.name || "").toLowerCase() === "yes")
 
         return {
-          id: m.id,
-          title: m.title,
-          description: m.description,
+          id: evt.id,
+          title: evt.title,
+          description: evt.description,
           outcomes,
-          is_binary: m.is_binary || isBinaryYesNo,
+          is_binary: primaryMarket?.is_binary || isBinaryYesNo,
           chance: yesOption ? yesOption.probability : undefined,
-          image: m.cover_url || "📈",
-          volume: m.volume_total || "—",
-          slug: m.slug,
+          image: evt.cover_url || primaryMarket?.cover_url || "📈",
+          volume: primaryMarket?.volume_total || "—",
+          slug: evt.slug,
+          primary_market_id: primaryMarket?.id,
+          group_rule: evt.group_rule,
         }
       })
       setMarkets(normalized)
@@ -54,10 +60,10 @@ export default function MarketGrid() {
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto px-12">
+    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12">
       {error && <div className="text-red-400 mb-3">{error}</div>}
       {loading && <LoadingSpinner />}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
         {markets.map((market, idx) => {
           if (
             market.chance !== undefined ||

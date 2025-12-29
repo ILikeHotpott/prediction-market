@@ -62,38 +62,38 @@ def _parse_json(request):
 def _get_market_and_option(market_id, option_id=None, option_index=None):
     now = timezone.now()
     try:
-        market = (
-            Market.objects.select_for_update()
-            .prefetch_related(
-                Prefetch(
-                    "options",
-                    queryset=MarketOption.objects.prefetch_related("stats"),
-                )
-            )
-            .get(pk=market_id)
-        )
+        # lock the market row only to avoid FOR UPDATE on outer joins
+        market = Market.objects.select_for_update().get(pk=market_id)
     except Market.DoesNotExist:
         return None, None, JsonResponse({"error": "Market not found"}, status=404)
 
+    # fetch event without locking to avoid nullable join issues
+    event = getattr(market, "event", None)
+    if event is None:
+        try:
+            event = market.event
+        except Exception:
+            event = None
+
+    if event and (event.status != "active" or event.is_hidden):
+        return None, None, JsonResponse({"error": "Event is not active"}, status=400)
     if market.status != "active" or market.is_hidden:
         return None, None, JsonResponse({"error": "Market is not active"}, status=400)
 
-    if market.trading_deadline and market.trading_deadline <= now:
+    deadline = market.trading_deadline or (event.trading_deadline if event else None)
+    if deadline and deadline <= now:
         return None, None, JsonResponse({"error": "Trading deadline passed"}, status=400)
 
     option = None
+    options_qs = MarketOption.objects.select_related("stats").filter(market=market)
     if option_id:
         try:
-            option = MarketOption.objects.select_related("stats").get(
-                pk=option_id, market=market
-            )
+            option = options_qs.get(pk=option_id)
         except MarketOption.DoesNotExist:
             return None, None, JsonResponse({"error": "Option not found for market"}, status=404)
     elif option_index is not None:
         try:
-            option = MarketOption.objects.select_related("stats").get(
-                market=market, option_index=option_index
-            )
+            option = options_qs.get(option_index=option_index)
         except MarketOption.DoesNotExist:
             return None, None, JsonResponse({"error": "Option not found for market"}, status=404)
     else:

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import AuthModal from "../AuthModal";
 
@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [authView, setAuthView] = useState("login"); // "login" | "signup"
+  const lastSyncRef = useRef({});
   const backendBase =
     typeof window !== "undefined"
       ? process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
@@ -48,6 +49,14 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     async function syncUser() {
       if (!user || !backendBase) return;
+      const now = Date.now();
+      const last = lastSyncRef.current[user.id] || 0;
+      if (now - last < 10_000) return; // 10s guard
+      if (typeof window !== "undefined") {
+        const stored = window.sessionStorage.getItem("user-synced");
+        if (stored === user.id) return;
+      }
+      lastSyncRef.current[user.id] = now;
       const profile = user.user_metadata || {};
       try {
         await fetch(`${backendBase}/api/users/sync/`, {
@@ -61,6 +70,9 @@ export function AuthProvider({ children }) {
             role: profile.role, // backend defaults to "user" if missing
           }),
         });
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem("user-synced", user.id);
+        }
       } catch (_e) {
         // best-effort; ignore
       }

@@ -28,8 +28,65 @@ class User(models.Model):
         return self.display_name or str(self.id)
 
 
+class Event(models.Model):
+    """
+    UI 聚合层。一个 Event 下可以有多个 Market（二元），也可以只有一个。
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.TextField()
+    description = models.TextField(blank=True, default="")
+    cover_url = models.TextField(null=True, blank=True)
+    category = models.TextField(null=True, blank=True)
+    status = models.TextField(default="draft")
+    is_hidden = models.BooleanField(default=False)
+    sort_weight = models.IntegerField(default=0)
+    slug = models.TextField(unique=True, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User, db_column="created_by", null=True, blank=True, on_delete=models.DO_NOTHING
+    )
+    group_rule = models.TextField(default="standalone")
+    primary_market = models.ForeignKey(
+        "Market",
+        db_column="primary_market_id",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="primary_for_events",
+    )
+    resolved_market = models.ForeignKey(
+        "Market",
+        db_column="resolved_market_id",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="resolved_for_events",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolve_type = models.TextField(default="admin")
+    trading_deadline = models.DateTimeField(null=True, blank=True)
+    resolution_deadline = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "events"
+
+    def __str__(self) -> str:
+        return self.title
+
+
 class Market(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    event = models.ForeignKey(
+        Event,
+        db_column="event_id",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="markets",
+    )
     title = models.TextField()
     description = models.TextField()
     cover_url = models.TextField(null=True, blank=True)
@@ -54,6 +111,18 @@ class Market(models.Model):
     resolved_at = models.DateTimeField(null=True, blank=True)
     resolved_option_index = models.SmallIntegerField(null=True, blank=True)
     resolve_type = models.TextField(default="admin")
+    market_kind = models.TextField(default="binary")
+    assertion_text = models.TextField(null=True, blank=True)
+    bucket_label = models.TextField(null=True, blank=True)
+    legacy_parent_market = models.ForeignKey(
+        "self",
+        db_column="legacy_parent_market_id",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="legacy_children",
+    )
+    legacy_option_id = models.BigIntegerField(null=True, blank=True)
 
     class Meta:
         managed = False  # Supabase manages schema; Django should not create migrations.
@@ -75,6 +144,7 @@ class MarketOption(models.Model):
     title = models.TextField()
     is_active = models.BooleanField(default=True)
     onchain_outcome_id = models.TextField(null=True, blank=True)
+    side = models.TextField(null=True, blank=True)
 
     class Meta:
         managed = False  # Supabase manages schema; Django should not create migrations.
@@ -214,3 +284,81 @@ class OrderIntent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.market_id}:{self.option_id}:{self.side}:{self.status}"
+
+
+class Tag(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.TextField()
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        managed = False
+        db_table = "tags"
+
+
+class EventTag(models.Model):
+    event = models.ForeignKey(
+        Event,
+        db_column="event_id",
+        on_delete=models.DO_NOTHING,
+        related_name="event_tags",
+    )
+    tag = models.ForeignKey(
+        Tag,
+        db_column="tag_id",
+        on_delete=models.DO_NOTHING,
+        related_name="event_tags",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        managed = False
+        db_table = "event_tags"
+        unique_together = ("event", "tag")
+
+
+class Comment(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    market = models.ForeignKey(
+        Market, db_column="market_id", on_delete=models.DO_NOTHING, related_name="comments"
+    )
+    user = models.ForeignKey(
+        User, db_column="user_id", on_delete=models.DO_NOTHING, related_name="comments"
+    )
+    parent = models.ForeignKey(
+        "self",
+        db_column="parent_id",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="replies",
+    )
+    content = models.TextField()
+    status = models.TextField(default="active")
+    created_at = models.DateTimeField(default=timezone.now)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        User,
+        db_column="deleted_by",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="deleted_comments",
+    )
+    edited_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(default=timezone.now)
+    event = models.ForeignKey(
+        Event,
+        db_column="event_id",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="event_comments",
+    )
+
+    class Meta:
+        managed = False
+        db_table = "comments"
+
+    def __str__(self) -> str:
+        return f"{self.market_id}:{self.user_id}:{self.content[:20]}"
