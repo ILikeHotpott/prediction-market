@@ -1,12 +1,10 @@
 import Navigation from "@/components/Navigation";
-import FilterBar from "@/components/FilterBar";
 import MarketGrid from "@/components/MarketGrid";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#202b39]">
+    <div className="min-h-screen bg-background">
       <Navigation />
-      <FilterBar />
       <MarketGrid />
     </div>
   );

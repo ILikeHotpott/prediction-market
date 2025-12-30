@@ -372,7 +372,7 @@ export default function MarketDetail({ params }) {
   const hideOutcomes = isStandaloneEvent
 
   return (
-    <div className="min-h-screen bg-[#0f172a]">
+    <div className="min-h-screen bg-background">
       <Navigation />
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6">
         {loading && (
@@ -402,10 +402,10 @@ export default function MarketDetail({ params }) {
             {/* Sidebar */}
             <div className="space-y-6">
               {/* Trade Panel */}
-              <div className="bg-[#0d1c2c] dark:bg-[#0f172a] rounded-2xl border border-[#1f2e45] shadow-[0_20px_40px_rgba(0,0,0,0.45)] p-6">
+              <div className="bg-[#4B6BDA] rounded-2xl border border-[#0b75c0] shadow-[0_20px_40px_rgba(0,0,0,0.45)] p-6">
                 {!isStandaloneEvent && (
                   <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#24344a] border border-[#1f2e45] flex-shrink-0">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#0fa0ff] border border-[#0b75c0] flex-shrink-0">
                       {selectedMarket?.cover_url || eventData?.cover_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -427,7 +427,7 @@ export default function MarketDetail({ params }) {
                 )}
 
                 {/* Buy/Sell Tabs */}
-                <div className="flex gap-6 mt-6 border-b border-[#1d2c3f]">
+                <div className="flex gap-6 mt-6 border-b border-[#0b75c0]">
                   <button
                     onClick={() => setSide("buy")}
                     className={`pb-3 text-xl font-semibold transition-colors ${
@@ -481,7 +481,7 @@ export default function MarketDetail({ params }) {
                       className={`h-16 rounded-xl text-white text-2xl font-semibold transition-all ${
                         outcomeAction === "no"
                           ? "bg-[#b91c1c] text-white shadow-[0_10px_30px_rgba(185,28,28,0.35)]"
-                          : "bg-[#1c2533] text-white/70 hover:bg-[#b91c1c]"
+                          : "bg-[#4d2a2a] text-white/80 hover:bg-[#b91c1c]"
                       }`}
                     >
                       No {displayNoPrice}
@@ -524,7 +524,7 @@ export default function MarketDetail({ params }) {
                       setAmount(limited)
                     }}
                       placeholder={side === "buy" ? "$0" : "0"}
-                      className={`w-full bg-[#0b1624] border border-[#24344a] rounded-xl px-4 py-4 text-right text-5xl font-semibold text-white focus:outline-none focus:ring-2 focus:ring-[#2b9ef8] ${
+                      className={`w-full bg-[#0fa0ff] border border-[#0b75c0] rounded-xl px-4 py-4 text-right text-5xl font-semibold text-white focus:outline-none focus:ring-2 focus:ring-[#58c7ff] ${
                         side === "buy" ? "pl-12" : "pl-4"
                       }`}
                     />
@@ -536,17 +536,17 @@ export default function MarketDetail({ params }) {
                         <button
                           key={val}
                           onClick={() => handleAmountPreset(val)}
-                          className="h-12 rounded-lg bg-[#273448] text-white text-lg font-semibold hover:bg-[#30405a] transition-colors"
+                          className="h-12 rounded-lg bg-[#0fa0ff] text-white text-lg font-semibold hover:bg-[#32b4ff] transition-colors"
                         >
                           +${val}
                         </button>
                       ))}
-                      <button
-                        onClick={() =>
-                          balance?.available_amount &&
-                          setAmount(Math.max(Number(balance.available_amount), 0).toFixed(2))
-                        }
-                        className="h-12 rounded-lg bg-[#273448] text-white text-lg font-semibold hover:bg-[#30405a] transition-colors"
+                        <button
+                          onClick={() =>
+                            balance?.available_amount &&
+                            setAmount(Math.max(Number(balance.available_amount), 0).toFixed(2))
+                          }
+                          className="h-12 rounded-lg bg-[#0fa0ff] text-white text-lg font-semibold hover:bg-[#32b4ff] transition-colors"
                       >
                         Max
                       </button>
@@ -557,14 +557,14 @@ export default function MarketDetail({ params }) {
                         <button
                           key={pct}
                           disabled
-                          className="h-12 rounded-lg bg-[#273448] text-white/60 text-lg font-semibold cursor-not-allowed"
+                          className="h-12 rounded-lg bg-[#0fa0ff] text-white/70 text-lg font-semibold cursor-not-allowed"
                         >
                           {pct}%
                         </button>
                       ))}
                       <button
                         disabled
-                        className="h-12 rounded-lg bg-[#273448] text-white/60 text-lg font-semibold cursor-not-allowed"
+                        className="h-12 rounded-lg bg-[#0fa0ff] text-white/70 text-lg font-semibold cursor-not-allowed"
                       >
                         Max
                       </button>
@@ -576,7 +576,7 @@ export default function MarketDetail({ params }) {
                 {success && <div className="text-green-400 mt-4 text-sm">{success}</div>}
 
                 {amountNum > 0 && actionPrice > 0 && (
-                  <div className="mt-6 border-t border-[#1d2c3f] pt-4">
+                  <div className="mt-6 border-t border-[#0b75c0] pt-4">
                     <div className="flex items-center justify-between text-lg text-gray-300">
                       <span className="flex items-center gap-2">
                         {summaryTitle} <span role="img" aria-label="money">💵</span>
@@ -594,15 +594,15 @@ export default function MarketDetail({ params }) {
                 <button
                   onClick={handlePlaceOrder}
                   disabled={placing}
-                  className="w-full mt-6 py-4 bg-[#2b9ef8] hover:bg-[#268de0] disabled:bg-[#1d3c5e] disabled:cursor-not-allowed text-white text-xl font-semibold rounded-xl transition-colors shadow-[0_12px_30px_rgba(43,158,248,0.35)]"
+                  className="w-full mt-6 py-4 bg-[#00a6ff] hover:bg-[#0094e6] disabled:bg-[#0fa0ff] disabled:cursor-not-allowed text-white text-xl font-semibold rounded-xl transition-colors shadow-[0_12px_30px_rgba(0,166,255,0.35)]"
                 >
                   {placing ? "Submitting..." : `${side === "buy" ? "Buy" : "Sell"} ${actionLabel} ${selectedLabel}`}
                 </button>
               </div>
 
               {/* Related Markets placeholder */}
-              <div className="bg-[#1e293b] dark:bg-[#0f172a] rounded-lg border border-gray-700 p-6">
-                <div className="flex gap-4 border-b border-gray-700 mb-4">
+              <div className="bg-[#3f6f56] rounded-lg border border-[#2f4b3c] p-6">
+                <div className="flex gap-4 border-b border-[#2f4b3c] mb-4">
                   <button className="pb-2 border-b-2 border-white text-white font-semibold text-sm">
                     All
                   </button>

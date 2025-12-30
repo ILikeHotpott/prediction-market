@@ -43,7 +43,10 @@ export default function MarketChart({
     : (market?.options || []).slice(0, 4)
 
   return (
-    <div className="bg-[#1e293b] dark:bg-[#0f172a] rounded-lg border border-gray-700 p-6">
+    <div
+      className="rounded-lg p-6 border border-[#2f4b3c]"
+      style={{ backgroundColor: "var(--app-background)" }}
+    >
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
@@ -53,8 +56,8 @@ export default function MarketChart({
           </div>
         </div>
         <div className="flex gap-2">
-          <button className="p-2 hover:bg-gray-700 rounded transition-colors">🔗</button>
-          <button className="p-2 hover:bg-gray-700 rounded transition-colors">🔖</button>
+          <button className="p-2 hover:bg-white/10 rounded transition-colors">🔗</button>
+          <button className="p-2 hover:bg-white/10 rounded transition-colors">🔖</button>
         </div>
       </div>
 
@@ -85,13 +88,13 @@ export default function MarketChart({
       <div className="h-80 mb-4">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={mockChartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="date" stroke="#9ca3af" />
-            <YAxis stroke="#9ca3af" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#2f4b3c" />
+            <XAxis dataKey="date" stroke="#dbe8de" />
+            <YAxis stroke="#dbe8de" />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#1e293b",
-                border: "1px solid #374151",
+                backgroundColor: "var(--app-background)",
+                border: "1px solid #2f4b3c",
                 borderRadius: "8px",
                 color: "#fff",
               }}
@@ -105,17 +108,17 @@ export default function MarketChart({
       </div>
 
       <div className="flex gap-2 mb-6">
-        <button className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors">1H</button>
-        <button className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors">6H</button>
-        <button className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors">1D</button>
-        <button className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors">1W</button>
-        <button className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors">1M</button>
-        <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors">ALL</button>
+        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">1H</button>
+        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">6H</button>
+        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">1D</button>
+        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">1W</button>
+        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">1M</button>
+        <button className="px-3 py-1 bg-white/20 hover:bg-white/25 text-white text-sm rounded transition-colors">ALL</button>
       </div>
 
       {/* Outcome Table */}
       {!hideOutcomes && (
-        <div className="border-t border-gray-700 pt-4">
+        <div className="border-t border-[#2f4b3c] pt-4">
           <div className="flex items-center justify-between mb-4 text-sm text-gray-400">
             <span>OUTCOME</span>
             <span>% CHANCE 🔄</span>
@@ -176,9 +179,9 @@ function OutcomeRow({
   const noActive = isSelected && selectedAction === "no"
 
   return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-700 last:border-0">
+    <div className="flex items-center justify-between py-3 border-b border-[#2f4b3c] last:border-0">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-xl">
+        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-xl">
           {avatar}
         </div>
         <div>

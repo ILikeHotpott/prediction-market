@@ -2,12 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { ChevronDown, ChevronUp, Heart, MessageSquare } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
 export default function Comments({ marketId, user, openAuthModal }) {
   const [comments, setComments] = useState([])
+  const [commentsCache, setCommentsCache] = useState({})
   const [holdersOnly, setHoldersOnly] = useState(true)
   const [sort, setSort] = useState("newest")
   const [loading, setLoading] = useState(false)
@@ -36,6 +47,12 @@ export default function Comments({ marketId, user, openAuthModal }) {
   const loadComments = async () => {
     setLoading(true)
     setError("")
+    const cacheKey = `${marketId || "none"}|${sort}|${holdersOnly ? "holders" : "all"}`
+    if (commentsCache[cacheKey]) {
+      setComments(commentsCache[cacheKey])
+      setLoading(false)
+      return
+    }
     try {
       const url = new URL(`${backendBase}/api/markets/${marketId}/comments/`)
       url.searchParams.set("sort", sort)
@@ -50,6 +67,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
       }
       const data = await res.json()
       setComments(data.items || [])
+      setCommentsCache((prev) => ({ ...prev, [cacheKey]: data.items || [] }))
     } catch (err) {
       setError(err.message || "Failed to load comments")
     } finally {
@@ -88,6 +106,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
       if (parentId) {
         setReplyTarget(null)
       }
+      setCommentsCache({})
       await loadComments()
     } catch (err) {
       setError(err.message || "Failed to post comment")
@@ -103,7 +122,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
       {Array.from({ length: 3 }).map((_, idx) => (
         <div
           key={idx}
-          className="p-4 rounded-lg border border-gray-800 bg-[#0f172a]"
+          className="p-4 rounded-xl bg-white/5 backdrop-blur shadow-sm"
         >
           <div className="flex gap-3">
             <Skeleton className="h-10 w-10 rounded-full" />
@@ -123,82 +142,123 @@ export default function Comments({ marketId, user, openAuthModal }) {
   )
 
   return (
-    <div className="bg-[#1e293b] dark:bg-[#0f172a] rounded-lg border border-gray-700 p-6">
-      <div className="flex gap-6 border-b border-gray-700 mb-6">
-        <button className="pb-3 border-b-2 border-white text-white font-semibold">
-          Comments ({totalCount.toLocaleString()})
-        </button>
-        <span className="pb-3 text-gray-500">Top Holders</span>
-        <span className="pb-3 text-gray-500">Activity</span>
-      </div>
-
-      <div className="mb-6">
-        <input
-          type="text"
-          value={drafts.root || ""}
-          onChange={(e) => updateDraft("root", e.target.value)}
-          placeholder={user ? "Add a comment" : "Sign in to add a comment"}
-          className="w-full bg-[#334155] dark:bg-[#1e293b] text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border border-gray-700"
-          disabled={!user}
-        />
-        <div className="flex justify-end mt-2">
-          <button
-            onClick={() => submitComment(null)}
-            disabled={postingIds.root}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 text-white rounded-lg transition-colors"
-          >
-            {postingIds.root ? "Posting..." : "Post"}
-          </button>
+    <Card
+      className="text-white shadow-2xl border border-[#2f4b3c] backdrop-blur"
+      style={{ backgroundColor: "var(--app-background)" }}
+    >
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <CardTitle className="text-xl font-semibold text-white">Comments</CardTitle>
+            <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-200">
+              {totalCount.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-300 hover:text-white">
+              Top Holders
+            </Button>
+            <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-300 hover:text-white">
+              Activity
+            </Button>
+          </div>
         </div>
-      </div>
+      </CardHeader>
 
-      <div className="flex items-center gap-4 mb-6">
-        <div className="flex items-center gap-2">
-          <span className="text-gray-400 text-sm">Sort by:</span>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value)}
-            className="bg-[#334155] dark:bg-[#1e293b] text-white px-3 py-1.5 rounded border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-          </select>
-        </div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={holdersOnly}
-            onChange={(e) => setHoldersOnly(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-700 bg-[#334155] text-blue-600 focus:ring-blue-500"
+      <CardContent className="pt-0 space-y-6">
+        <div className="rounded-2xl p-2 bg-transparent">
+          <textarea
+            rows={3}
+            value={drafts.root || ""}
+            onChange={(e) => updateDraft("root", e.target.value)}
+            placeholder={user ? "Type your comment..." : "Sign in to add a comment"}
+            className="w-full bg-transparent border border-white/10 text-white placeholder:text-slate-500 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/70 resize-none"
+            disabled={!user}
           />
-          <span className="text-blue-500 text-sm">✓ Holders</span>
-        </label>
-        <div className="ml-auto text-blue-500 text-sm">⚠️ Beware of external links.</div>
-      </div>
-
-      {error && <div className="text-red-400 text-sm mb-3">{error}</div>}
-      {loading && comments.length === 0 ? (
-        renderSkeletons()
-      ) : filteredComments.length === 0 ? (
-        <div className="text-gray-400">No comments yet.</div>
-      ) : (
-        <div className="space-y-4">
-          {filteredComments.map((comment) => (
-            <CommentItem
-              key={comment.id}
-              comment={comment}
-              user={user}
-              drafts={drafts}
-              updateDraft={updateDraft}
-              submitComment={submitComment}
-              postingIds={postingIds}
-              replyTarget={replyTarget}
-              setReplyTarget={setReplyTarget}
-            />
-          ))}
+          <div className="flex justify-end pt-3">
+            <Button
+              onClick={() => submitComment(null)}
+              disabled={postingIds.root || !user}
+              size="sm"
+              className="px-6 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-full shadow-lg shadow-blue-500/30"
+            >
+              {postingIds.root ? "Posting..." : "Post"}
+            </Button>
+          </div>
         </div>
-      )}
-    </div>
+
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-slate-400 text-sm">Filter</span>
+            <div className="inline-flex rounded-full bg-white/10 border border-white/10 p-1">
+              <button
+                className={`px-4 py-1 text-sm rounded-full transition-colors ${
+                  !holdersOnly ? "bg-white text-slate-900 shadow" : "text-slate-200 hover:text-white"
+                }`}
+                onClick={() => setHoldersOnly(false)}
+                type="button"
+              >
+                All comments
+              </button>
+              <button
+                className={`px-4 py-1 text-sm rounded-full transition-colors ${
+                  holdersOnly ? "bg-white text-slate-900 shadow" : "text-slate-200 hover:text-white"
+                }`}
+                onClick={() => setHoldersOnly(true)}
+                type="button"
+              >
+                Holders only
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-sm">Sort</span>
+            <Select value={sort} onValueChange={(val) => setSort(val)}>
+              <SelectTrigger className="w-36 bg-white/10 border border-white/15 text-white rounded-full px-4 py-2 h-10 focus:ring-2 focus:ring-blue-500/70">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent
+                className="text-white border border-[#2f4b3c]"
+                style={{ backgroundColor: "var(--app-background)" }}
+              >
+                <SelectItem value="newest">Newest</SelectItem>
+                <SelectItem value="oldest">Oldest</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="ml-auto text-amber-300/90 text-sm flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <span>Beware of external links.</span>
+          </div>
+        </div>
+
+        {error && <div className="text-red-400 text-sm">{error}</div>}
+        {loading && comments.length === 0 ? (
+          renderSkeletons()
+        ) : filteredComments.length === 0 ? (
+          <div className="text-slate-400">No comments yet.</div>
+        ) : (
+          <div className="space-y-4">
+            {filteredComments.map((comment) => (
+              <CommentItem
+                key={comment.id}
+                comment={comment}
+                user={user}
+                drafts={drafts}
+                updateDraft={updateDraft}
+                submitComment={submitComment}
+                postingIds={postingIds}
+                replyTarget={replyTarget}
+                setReplyTarget={setReplyTarget}
+                parentUserName={null}
+              />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -211,31 +271,42 @@ function CommentItem({
   postingIds,
   replyTarget,
   setReplyTarget,
-  depth = 0,
+  parentUserName = null,
+  renderChildren = true,
 }) {
   const [showHoldings, setShowHoldings] = useState(false)
   const hasMultipleHoldings = (comment.holdings || []).length > 1
   const draftKey = comment.id
   const replyDraft = drafts[draftKey] || ""
 
-  const formatNumber = (value) => {
-    const num = Number(value)
-    if (Number.isNaN(num)) return value
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
-    return num.toFixed(2)
+  const formatAmount = (value) => {
+    if (value === null || value === undefined) return ""
+    const str = String(value)
+    if (!str.includes(".")) return str
+    const trimmed = str.replace(/\.?0+$/, "")
+    return trimmed || "0"
   }
 
   const primaryHolding = comment.holdings?.[0]
   const avatarUrl = comment.user?.avatar_url
   const displayInitial = (comment.user?.display_name || "U").slice(0, 1).toUpperCase()
+  const buildFlatReplies = (items, parentName) => {
+    if (!items?.length) return []
+    const list = []
+    items.forEach((item) => {
+      list.push({ item, parentName })
+      if (item.replies?.length) {
+        list.push(...buildFlatReplies(item.replies, item.user?.display_name || "User"))
+      }
+    })
+    return list
+  }
+  const flatReplies = renderChildren
+    ? buildFlatReplies(comment.replies, comment.user?.display_name || "User")
+    : []
 
   return (
-    <div
-      className={`group p-4 rounded-lg transition-colors ${
-        depth ? "ml-6 border-l border-gray-800" : "bg-[#0f172a] border border-gray-800"
-      }`}
-    >
+    <div className="group relative p-4 rounded-xl transition-colors">
       <div className="flex gap-3">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm flex-shrink-0 overflow-hidden">
           {avatarUrl ? (
@@ -258,20 +329,23 @@ function CommentItem({
             {primaryHolding && (
               <div className="relative">
                 <button
-                  className="text-xs bg-green-600/20 text-green-300 px-2 py-1 rounded-full border border-green-700 flex items-center gap-1"
+                  className="text-xs bg-emerald-500/15 text-emerald-200 px-2 py-1 rounded-full flex items-center gap-1 shadow-sm"
                   onClick={() => setShowHoldings((prev) => !prev)}
                 >
                   <span>
-                    {formatNumber(primaryHolding.shares)} {primaryHolding.option_title || "Position"}
+                    {formatAmount(primaryHolding.cost_basis)} {primaryHolding.option_title || "Position"}
                   </span>
                   {hasMultipleHoldings && (showHoldings ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                 </button>
                 {hasMultipleHoldings && showHoldings && (
-                  <div className="absolute z-10 mt-2 w-64 bg-[#0f172a] border border-gray-700 rounded-lg shadow-lg p-3 space-y-2">
+                  <div
+                    className="absolute z-10 mt-2 w-64 rounded-lg shadow-lg p-3 space-y-2 border border-[#2f4b3c]"
+                    style={{ backgroundColor: "var(--app-background)" }}
+                  >
                     {comment.holdings.map((h, idx) => (
                       <div key={`${h.option_id}-${idx}`} className="text-xs text-gray-200 flex justify-between">
                         <span className="text-gray-300">{h.option_title || "Position"}</span>
-                        <span className="text-gray-100">{formatNumber(h.shares)}</span>
+                        <span className="text-gray-100">{formatAmount(h.cost_basis)}</span>
                       </div>
                     ))}
                   </div>
@@ -280,51 +354,62 @@ function CommentItem({
             )}
             <span className="text-gray-500 text-xs">• {formatTimeAgo(comment.created_at)}</span>
           </div>
-          <p className="text-white mt-2">{comment.content}</p>
-          <div className="flex items-center gap-4 mt-3 text-gray-400">
-            <button className="flex items-center gap-1 hover:text-white text-sm" type="button">
-              <Heart size={16} />
+          <p className="text-slate-100 mt-2 leading-relaxed">
+            {parentUserName ? <span className="text-blue-400 mr-2">@{parentUserName}</span> : null}
+            {comment.content}
+          </p>
+          <div className="flex items-center gap-2 mt-3 text-gray-400">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1 text-slate-300 hover:text-white"
+              type="button"
+            >
+              <Heart className="w-4 h-4" />
               <span>Like</span>
-            </button>
+            </Button>
             {user && (
-              <button
-                className="flex items-center gap-1 hover:text-white text-sm"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1 text-slate-300 hover:text-white"
                 onClick={() => {
                   setReplyTarget(draftKey)
                   updateDraft(draftKey, replyDraft || "")
                 }}
                 type="button"
               >
-                <MessageSquare size={16} />
+                <MessageSquare className="w-4 h-4" />
                 Reply
-              </button>
+              </Button>
             )}
           </div>
 
           {user && replyTarget === draftKey && (
-            <div className="mt-3">
-              <input
-                type="text"
+            <div className="mt-3 space-y-3">
+              <Textarea
+                rows={2}
                 value={replyDraft}
                 onChange={(e) => updateDraft(draftKey, e.target.value)}
-                placeholder="Reply to this comment"
-                className="w-full bg-[#1e293b] text-white px-3 py-2 rounded border border-gray-700"
+                placeholder="Reply to this comment..."
+                className="bg-transparent text-white placeholder:text-slate-500 border border-white/15 rounded-xl focus-visible:ring-blue-500/70"
               />
-              <div className="flex justify-end mt-2">
-                <button
+              <div className="flex justify-end">
+                <Button
                   onClick={() => submitComment(comment.id)}
                   disabled={postingIds[draftKey]}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 text-white rounded"
+                  size="sm"
+                  className="px-5 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-full shadow-lg shadow-blue-500/30"
                 >
                   {postingIds[draftKey] ? "Posting..." : "Reply"}
-                </button>
+                </Button>
               </div>
             </div>
           )}
 
-          {comment.replies?.length > 0 && (
+          {flatReplies.length > 0 && (
             <div className="mt-4 space-y-3">
-              {comment.replies.map((reply) => (
+              {flatReplies.map(({ item: reply, parentName }) => (
                 <CommentItem
                   key={reply.id}
                   comment={reply}
@@ -335,7 +420,8 @@ function CommentItem({
                   postingIds={postingIds}
                   replyTarget={replyTarget}
                   setReplyTarget={setReplyTarget}
-                  depth={depth + 1}
+                  parentUserName={parentName}
+                  renderChildren={false}
                 />
               ))}
             </div>
