@@ -43,21 +43,18 @@ export default function MarketChart({
     : (market?.options || []).slice(0, 4)
 
   return (
-    <div
-      className="rounded-lg p-6 border border-[#2f4b3c]"
-      style={{ backgroundColor: "var(--app-background)" }}
-    >
+    <div className="rounded-lg p-6 border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
-          <div className="flex items-center gap-4 text-sm text-gray-400">
-            <span>💰 {volume || "—"} Vol.</span>
-            <span>📅 {resolution}</span>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">{title}</h2>
+          <div className="flex items-center gap-4 text-sm text-slate-600">
+            <span>{volume || "—"} Vol.</span>
+            <span>{resolution}</span>
           </div>
         </div>
         <div className="flex gap-2">
-          <button className="p-2 hover:bg-white/10 rounded transition-colors">🔗</button>
-          <button className="p-2 hover:bg-white/10 rounded transition-colors">🔖</button>
+          <button className="p-2 hover:bg-slate-100 rounded transition-colors">🔗</button>
+          <button className="p-2 hover:bg-slate-100 rounded transition-colors">🔖</button>
         </div>
       </div>
 
@@ -76,7 +73,7 @@ export default function MarketChart({
             return (
               <div key={o.id || idx} className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${cls}`}></div>
-                <span className="text-white">
+                <span className="text-slate-900">
                   {o.title} {probability}%
                 </span>
               </div>
@@ -88,15 +85,15 @@ export default function MarketChart({
       <div className="h-80 mb-4">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={mockChartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#2f4b3c" />
-            <XAxis dataKey="date" stroke="#dbe8de" />
-            <YAxis stroke="#dbe8de" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e6ddcb" />
+            <XAxis dataKey="date" stroke="#c7b796" />
+            <YAxis stroke="#c7b796" />
             <Tooltip
               contentStyle={{
-                backgroundColor: "var(--app-background)",
-                border: "1px solid #2f4b3c",
+                backgroundColor: "#fff",
+                border: "1px solid #e6ddcb",
                 borderRadius: "8px",
-                color: "#fff",
+                color: "#1f2937",
               }}
             />
             <Line type="monotone" dataKey="zohran" stroke="#f97316" strokeWidth={2} dot={false} />
@@ -108,18 +105,30 @@ export default function MarketChart({
       </div>
 
       <div className="flex gap-2 mb-6">
-        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">1H</button>
-        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">6H</button>
-        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">1D</button>
-        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">1W</button>
-        <button className="px-3 py-1 bg-white/10 hover:bg-white/15 text-white text-sm rounded transition-colors">1M</button>
-        <button className="px-3 py-1 bg-white/20 hover:bg-white/25 text-white text-sm rounded transition-colors">ALL</button>
+        <button className="px-3 py-1 bg-white border border-[#e6ddcb] hover:bg-[#e9eef8] text-slate-800 text-sm rounded transition-colors">
+          1H
+        </button>
+        <button className="px-3 py-1 bg-white border border-[#e6ddcb] hover:bg-[#e9eef8] text-slate-800 text-sm rounded transition-colors">
+          6H
+        </button>
+        <button className="px-3 py-1 bg-white border border-[#e6ddcb] hover:bg-[#e9eef8] text-slate-800 text-sm rounded transition-colors">
+          1D
+        </button>
+        <button className="px-3 py-1 bg-white border border-[#e6ddcb] hover:bg-[#e9eef8] text-slate-800 text-sm rounded transition-colors">
+          1W
+        </button>
+        <button className="px-3 py-1 bg-white border border-[#e6ddcb] hover:bg-[#e9eef8] text-slate-800 text-sm rounded transition-colors">
+          1M
+        </button>
+        <button className="px-3 py-1 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white border border-[#3f5e9c] text-sm rounded transition-colors">
+          ALL
+        </button>
       </div>
 
       {/* Outcome Table */}
       {!hideOutcomes && (
-        <div className="border-t border-[#2f4b3c] pt-4">
-          <div className="flex items-center justify-between mb-4 text-sm text-gray-400">
+        <div className="border-t border-[#e6ddcb] pt-4">
+          <div className="flex items-center justify-between mb-4 text-sm text-slate-700">
             <span>OUTCOME</span>
             <span>% CHANCE 🔄</span>
           </div>
@@ -179,21 +188,21 @@ function OutcomeRow({
   const noActive = isSelected && selectedAction === "no"
 
   return (
-    <div className="flex items-center justify-between py-3 border-b border-[#2f4b3c] last:border-0">
+    <div className="flex items-center justify-between py-3 border-b border-[#e6ddcb] last:border-0">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-xl">
+        <div className="w-10 h-10 rounded-full bg-[#f2eadc] flex items-center justify-center text-xl">
           {avatar}
         </div>
         <div>
-          <div className="text-white font-medium">{name}</div>
-          <div className="text-xs text-gray-400">{volume} Vol. ℹ️</div>
+          <div className="text-slate-900 font-medium">{name}</div>
+          <div className="text-xs text-slate-600">{volume} Vol.</div>
         </div>
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-white font-semibold text-lg">{probability}%</span>
+          <span className="text-slate-900 font-semibold text-lg">{probability}%</span>
           {change && (
-            <span className="text-green-400 text-sm">▲{change}%</span>
+            <span className="text-green-600 text-sm">▲{change}%</span>
           )}
         </div>
         <div className="flex gap-2">
@@ -201,8 +210,8 @@ function OutcomeRow({
             onClick={() => onSelect?.("yes")}
             className={`w-[180px] py-2 font-medium rounded transition-colors text-center ${
               yesActive
-                ? "bg-[#20af64] text-white shadow-[0_8px_20px_rgba(22,163,74,0.35)]"
-                : "bg-[#3B5355] hover:bg-[#5DA96E] text-[#6BC57B] hover:text-white"
+                ? "bg-emerald-700 text-white"
+                : "bg-emerald-600 hover:bg-emerald-500 text-white"
             }`}
           >
             Buy Yes {yesPrice}
@@ -211,8 +220,8 @@ function OutcomeRow({
             onClick={() => onSelect?.("no")}
             className={`w-[180px] py-2 font-medium rounded transition-colors text-center ${
               noActive
-                ? "bg-[#2b3544] text-white"
-                : "bg-[#4A414D] hover:bg-[#D04740] text-[#D04740] hover:text-white"
+                ? "bg-[#4b6ea9] text-white"
+                : "bg-[#5d7db2] hover:bg-[#4b6ea9] text-white"
             }`}
           >
             Buy No {noPrice}

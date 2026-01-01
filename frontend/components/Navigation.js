@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Search, Bell, Menu, Moon, Sun, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/components/auth/AuthProvider";
 import Logo from "@/components/Logo";
 
@@ -21,6 +22,7 @@ export default function Navigation() {
   const { user, session, openAuthModal, signOut } = useAuth();
   const [navPortfolio, setNavPortfolio] = useState(0);
   const [navCash, setNavCash] = useState(0);
+  const [navLoading, setNavLoading] = useState(false);
   const router = useRouter();
 
   const categories = [
@@ -53,8 +55,10 @@ export default function Navigation() {
       if (!backendBase || !user) {
         setNavPortfolio(0);
         setNavCash(0);
+        setNavLoading(false);
         return;
       }
+      setNavLoading(true);
       try {
         const res = await fetch(`${backendBase}/api/users/me/portfolio/`, {
           headers: { "X-User-Id": user.id },
@@ -69,6 +73,8 @@ export default function Navigation() {
       } catch (_e) {
         setNavCash(0);
         setNavPortfolio(0);
+      } finally {
+        setNavLoading(false);
       }
     }
     fetchPortfolio();
@@ -121,15 +127,23 @@ export default function Navigation() {
                   <Link href="/portfolio" className="flex items-center gap-5 hover:opacity-90">
                     <div className="text-left">
                       <div className="text-[13px] text-muted-foreground leading-tight font-bold">PORTFOLIO</div>
-                      <div className="text-lg font-bold text-[#F4F6FA] leading-tight font-display tracking-wide">
-                        {fmt(navPortfolio)}
-                      </div>
+                      {navLoading ? (
+                        <Skeleton className="h-5 w-24 bg-white/15" />
+                      ) : (
+                        <div className="text-lg font-bold text-[#F4F6FA] leading-tight font-display tracking-wide">
+                          {fmt(navPortfolio)}
+                        </div>
+                      )}
                     </div>
                     <div className="text-left">
                       <div className="text-[13px] text-muted-foreground leading-tight font-bold">CASH</div>
-                      <div className="text-lg font-bold text-[#F4F6FA] leading-tight font-display tracking-wide">
-                        {fmt(navCash)}
-                      </div>
+                      {navLoading ? (
+                        <Skeleton className="h-5 w-20 bg-white/15" />
+                      ) : (
+                        <div className="text-lg font-bold text-[#F4F6FA] leading-tight font-display tracking-wide">
+                          {fmt(navCash)}
+                        </div>
+                      )}
                     </div>
                   </Link>
                   <Button
@@ -293,8 +307,19 @@ export default function Navigation() {
                     <Link href="/portfolio" className="flex-1">
                       <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                         <div className="text-xs text-muted-foreground font-bold uppercase">Portfolio</div>
-                        <div className="text-lg font-semibold text-secondary font-display">{fmt(navPortfolio)}</div>
-                        <div className="text-xs text-muted-foreground font-bold uppercase">Cash {fmt(navCash)}</div>
+                        {navLoading ? (
+                          <Skeleton className="h-5 w-24 bg-white/15" />
+                        ) : (
+                          <div className="text-lg font-semibold text-secondary font-display">{fmt(navPortfolio)}</div>
+                        )}
+                        <div className="text-xs text-muted-foreground font-bold uppercase">
+                          Cash{" "}
+                          {navLoading ? (
+                            <Skeleton className="h-4 w-20 inline-block align-middle bg-white/15" />
+                          ) : (
+                            fmt(navCash)
+                          )}
+                        </div>
                       </div>
                     </Link>
                     <Button

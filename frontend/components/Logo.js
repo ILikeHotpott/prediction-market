@@ -10,7 +10,7 @@ const bungee = Bungee({
 
 export default function MonoFutureMarqueeLogo({
   text = 'MONOFUTURE',
-  bulbCount = 88, // 4 的倍数
+  bulbCount = 52, // 4 的倍数
   speedMs = 90,
   className,
   style,
@@ -38,8 +38,8 @@ export default function MonoFutureMarqueeLogo({
   };
 
 
-  const innerInsetX = 44;
-  const innerInsetY = 50;
+  const innerInsetX = 50;
+  const innerInsetY = 48;
 
   const inner = {
     x: outer.x + innerInsetX,
@@ -180,8 +180,9 @@ export default function MonoFutureMarqueeLogo({
             <rect x="0" y="0" width={W} height={H} fill="black" />
             <text
               x={W / 2}
-              y={inner.y + inner.h * 0.73}
+              y={inner.y + inner.h / 2}
               textAnchor="middle"
+              dominantBaseline="middle"
               fontSize="132"
               fontWeight="900"
               fill="white"
@@ -280,8 +281,9 @@ export default function MonoFutureMarqueeLogo({
         <g filter={`url(#${uid}_textShadow)`} clipPath={`url(#${uid}_innerClip)`}>
           <text
             x={W / 2}
-            y={inner.y + inner.h * 0.73}
+            y={inner.y + inner.h / 2}
             textAnchor="middle"
+            dominantBaseline="middle"
             fontSize="132"
             fontWeight="900"
             fill="none"
@@ -297,8 +299,9 @@ export default function MonoFutureMarqueeLogo({
 
           <text
             x={W / 2}
-            y={inner.y + inner.h * 0.73}
+            y={inner.y + inner.h / 2}
             textAnchor="middle"
+            dominantBaseline="middle"
             fontSize="132"
             fontWeight="900"
             fill={`url(#${uid}_gold)`}

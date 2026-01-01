@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from ..models import BalanceSnapshot, MarketOptionStats, OrderIntent, Position, User
-from .common import _get_user_from_request
+from ..services.auth import get_user_from_request
 
 
 @csrf_exempt
@@ -65,7 +65,7 @@ def sync_user(request):
 def me(request):
     if request.method == "OPTIONS":
         return JsonResponse({}, status=200)
-    user = _get_user_from_request(request)
+    user = get_user_from_request(request)
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
     return JsonResponse(
@@ -83,7 +83,7 @@ def me(request):
 def get_balance(request):
     if request.method == "OPTIONS":
         return JsonResponse({}, status=200)
-    user = _get_user_from_request(request)
+    user = get_user_from_request(request)
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
@@ -106,7 +106,7 @@ def get_balance(request):
 def portfolio(request):
     if request.method == "OPTIONS":
         return JsonResponse({}, status=200)
-    user = _get_user_from_request(request)
+    user = get_user_from_request(request)
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
@@ -161,7 +161,7 @@ def portfolio(request):
 def order_history(request):
     if request.method == "OPTIONS":
         return JsonResponse({}, status=200)
-    user = _get_user_from_request(request)
+    user = get_user_from_request(request)
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 

@@ -212,26 +212,42 @@ export default function MarketDetail({ params }) {
     setOutcomeAction(action)
   }
 
-  const price = useMemo(() => {
-    if (!selectedOption || selectedOption.probability_bps == null) return null
+  const yesPrice = useMemo(() => {
+    if (yesOption?.probability_bps == null) return null
+    return yesOption.probability_bps / 10000
+  }, [yesOption])
+
+  const noPrice = useMemo(() => {
+    if (noOption?.probability_bps != null) return noOption.probability_bps / 10000
+    if (yesPrice != null) return 1 - yesPrice
+    return null
+  }, [noOption, yesPrice])
+
+  // Selected option price (do not invert; option already matches outcomeAction)
+  const selectedPrice = useMemo(() => {
+    if (selectedOption?.probability_bps == null) return null
     return selectedOption.probability_bps / 10000
   }, [selectedOption])
 
   const actionPrice = useMemo(() => {
-    if (!price && price !== 0) return null
-    const yesPrice = price
-    const noPrice = 1 - price
-    return outcomeAction === "no" ? noPrice : yesPrice
-  }, [price, outcomeAction])
+    if (outcomeAction === "no") {
+      return noPrice != null ? noPrice : selectedPrice
+    }
+    return yesPrice != null ? yesPrice : selectedPrice
+  }, [outcomeAction, yesPrice, noPrice, selectedPrice])
 
   const amountNum = useMemo(() => {
     const val = Number(amount)
     return Number.isFinite(val) ? Math.max(val, 0) : 0
   }, [amount])
 
-  const shares = price ? (amountNum > 0 ? amountNum / price : 0) : 0
+  const shares = selectedPrice ? (amountNum > 0 ? amountNum / selectedPrice : 0) : 0
   const isSell = side === "sell"
-  const potentialPayout = !isSell && actionPrice && actionPrice > 0 ? amountNum / actionPrice : 0
+  const effectivePriceForPayout = selectedPrice ?? actionPrice
+  const potentialPayout =
+    !isSell && effectivePriceForPayout && effectivePriceForPayout > 0
+      ? amountNum / effectivePriceForPayout
+      : 0
   const potentialProceeds = isSell && actionPrice ? amountNum * actionPrice : 0
   const avgPriceLabel = actionPrice != null ? `${(actionPrice * 100).toFixed(1)}¢` : "—"
   const toWinValue = isSell ? potentialProceeds : potentialPayout
@@ -278,7 +294,7 @@ export default function MarketDetail({ params }) {
       setError("请选择一个选项")
       return
     }
-    if (!price || price <= 0) {
+    if (actionPrice == null || actionPrice <= 0) {
       setError("价格不可用")
       return
     }
@@ -347,19 +363,14 @@ export default function MarketDetail({ params }) {
     }
   }
 
-  const yesPriceCents = yesOption?.probability_bps != null ? (yesOption.probability_bps / 100).toFixed(0) : null
-  const noPriceCents =
-    noOption?.probability_bps != null
-      ? (noOption.probability_bps / 100).toFixed(0)
-      : yesOption?.probability_bps != null
-        ? (100 - yesOption.probability_bps / 100).toFixed(0)
-        : null
-  const selectedYesPriceCents =
-    selectedOption?.probability_bps != null ? (selectedOption.probability_bps / 100).toFixed(0) : yesPriceCents
-  const selectedNoPriceCents =
-    selectedOption?.probability_bps != null && selectedOption.probability_bps != null
-      ? (100 - selectedOption.probability_bps / 100).toFixed(0)
-      : noPriceCents
+  const formatCents = (price) =>
+    price != null
+      ? (price * 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })
+      : null
+  const yesPriceCents = formatCents(yesPrice)
+  const noPriceCents = formatCents(noPrice)
+  const selectedYesPriceCents = yesPriceCents
+  const selectedNoPriceCents = noPriceCents
   const displayYesPrice = selectedYesPriceCents != null ? `${selectedYesPriceCents}¢` : "—"
   const displayNoPrice = selectedNoPriceCents != null ? `${selectedNoPriceCents}¢` : "—"
   const selectedLabel =
@@ -402,10 +413,10 @@ export default function MarketDetail({ params }) {
             {/* Sidebar */}
             <div className="space-y-6">
               {/* Trade Panel */}
-              <div className="bg-[#4B6BDA] rounded-2xl border border-[#0b75c0] shadow-[0_20px_40px_rgba(0,0,0,0.45)] p-6">
+              <div className="bg-[#f9f6ee] text-slate-900 rounded-2xl border border-[#e6ddcb] shadow-md p-6">
                 {!isStandaloneEvent && (
                   <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-[#0fa0ff] border border-[#0b75c0] flex-shrink-0">
+                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white border border-[#e6ddcb] flex-shrink-0">
                       {selectedMarket?.cover_url || eventData?.cover_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -418,20 +429,20 @@ export default function MarketDetail({ params }) {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="text-white text-xl font-semibold leading-tight truncate">
+                      <h3 className="text-slate-900 text-xl font-semibold leading-tight truncate">
                         {selectedMarket?.bucket_label || selectedMarket?.title || panelTitle}
                       </h3>
-                      <div className="text-gray-400 text-xs truncate">{eventData?.title}</div>
+                      <div className="text-slate-600 text-xs truncate">{eventData?.title}</div>
                     </div>
                   </div>
                 )}
 
                 {/* Buy/Sell Tabs */}
-                <div className="flex gap-6 mt-6 border-b border-[#0b75c0]">
+                <div className="flex gap-6 mt-6 border-b border-[#e6ddcb]">
                   <button
                     onClick={() => setSide("buy")}
                     className={`pb-3 text-xl font-semibold transition-colors ${
-                      side === "buy" ? "text-white border-b-2 border-white" : "text-gray-500"
+                      side === "buy" ? "text-red-700 border-b-2 border-red-600" : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
                     Buy
@@ -439,7 +450,7 @@ export default function MarketDetail({ params }) {
                   <button
                     onClick={() => setSide("sell")}
                     className={`pb-3 text-xl font-semibold transition-colors ${
-                      side === "sell" ? "text-white border-b-2 border-white" : "text-gray-500"
+                      side === "sell" ? "text-red-700 border-b-2 border-red-600" : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
                     Sell
@@ -454,10 +465,10 @@ export default function MarketDetail({ params }) {
                         const target = yesOption || selectedOption || optionsSorted[0]
                         selectOption(target, "yes")
                       }}
-                      className={`h-16 rounded-xl text-white text-2xl font-semibold transition-all ${
+                      className={`h-16 rounded-xl text-2xl font-semibold transition-all ${
                         outcomeAction === "yes"
-                          ? "bg-[#20af64] shadow-[0_10px_30px_rgba(22,163,74,0.35)]"
-                          : "bg-[#1d3c2e] text-white/90 hover:bg-[#20af64]"
+                          ? "bg-emerald-700 text-white shadow-sm"
+                          : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
                       }`}
                     >
                       Yes {displayYesPrice}
@@ -465,7 +476,7 @@ export default function MarketDetail({ params }) {
                     {side === "sell" && yesOption && userSharesForOption(yesOption) > 0 && (
                       <div
                         className={`text-center text-sm ${
-                          outcomeAction === "yes" ? "text-green-300" : "text-gray-400"
+                          outcomeAction === "yes" ? "text-emerald-700" : "text-slate-600"
                         }`}
                       >
                         {formattedSharesLabel(yesOption)}
@@ -478,10 +489,10 @@ export default function MarketDetail({ params }) {
                         const target = noOption || selectedOption || optionsSorted[1] || optionsSorted[0]
                         selectOption(target, "no")
                       }}
-                      className={`h-16 rounded-xl text-white text-2xl font-semibold transition-all ${
+                      className={`h-16 rounded-xl text-2xl font-semibold transition-all ${
                         outcomeAction === "no"
-                          ? "bg-[#b91c1c] text-white shadow-[0_10px_30px_rgba(185,28,28,0.35)]"
-                          : "bg-[#4d2a2a] text-white/80 hover:bg-[#b91c1c]"
+                          ? "bg-red-700 text-white shadow-sm"
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
                       }`}
                     >
                       No {displayNoPrice}
@@ -489,7 +500,7 @@ export default function MarketDetail({ params }) {
                     {side === "sell" && noOption && userSharesForOption(noOption) > 0 && (
                       <div
                         className={`text-center text-sm ${
-                          outcomeAction === "no" ? "text-red-300" : "text-gray-400"
+                          outcomeAction === "no" ? "text-red-700" : "text-slate-600"
                         }`}
                       >
                         {formattedSharesLabel(noOption)}
@@ -500,11 +511,11 @@ export default function MarketDetail({ params }) {
 
                 {/* Amount */}
                 <div className="mt-8 space-y-3">
-                  <div className="text-white text-2xl font-semibold">{side === "buy" ? "Amount" : "Shares"}</div>
+                  <div className="text-slate-900 text-2xl font-semibold">{side === "buy" ? "Amount" : "Shares"}</div>
 
                   <div className="relative">
                     {side === "buy" && (
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-4xl text-gray-500">$</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-4xl text-slate-400">$</span>
                     )}
                     <input
                       type="number"
@@ -524,7 +535,7 @@ export default function MarketDetail({ params }) {
                       setAmount(limited)
                     }}
                       placeholder={side === "buy" ? "$0" : "0"}
-                      className={`w-full bg-[#0fa0ff] border border-[#0b75c0] rounded-xl px-4 py-4 text-right text-5xl font-semibold text-white focus:outline-none focus:ring-2 focus:ring-[#58c7ff] ${
+                      className={`w-full bg-white border border-[#e6ddcb] rounded-xl px-4 py-4 text-right text-5xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/70 ${
                         side === "buy" ? "pl-12" : "pl-4"
                       }`}
                     />
@@ -536,7 +547,7 @@ export default function MarketDetail({ params }) {
                         <button
                           key={val}
                           onClick={() => handleAmountPreset(val)}
-                          className="h-12 rounded-lg bg-[#0fa0ff] text-white text-lg font-semibold hover:bg-[#32b4ff] transition-colors"
+                          className="h-12 rounded-lg bg-white border border-[#e6ddcb] text-slate-900 text-lg font-semibold hover:bg-rose-50 transition-colors"
                         >
                           +${val}
                         </button>
@@ -546,7 +557,7 @@ export default function MarketDetail({ params }) {
                             balance?.available_amount &&
                             setAmount(Math.max(Number(balance.available_amount), 0).toFixed(2))
                           }
-                          className="h-12 rounded-lg bg-[#0fa0ff] text-white text-lg font-semibold hover:bg-[#32b4ff] transition-colors"
+                          className="h-12 rounded-lg bg-white border border-[#e6ddcb] text-slate-900 text-lg font-semibold hover:bg-rose-50 transition-colors"
                       >
                         Max
                       </button>
@@ -557,14 +568,14 @@ export default function MarketDetail({ params }) {
                         <button
                           key={pct}
                           disabled
-                          className="h-12 rounded-lg bg-[#0fa0ff] text-white/70 text-lg font-semibold cursor-not-allowed"
+                          className="h-12 rounded-lg bg-slate-200 text-slate-500 text-lg font-semibold cursor-not-allowed"
                         >
                           {pct}%
                         </button>
                       ))}
                       <button
                         disabled
-                        className="h-12 rounded-lg bg-[#0fa0ff] text-white/70 text-lg font-semibold cursor-not-allowed"
+                        className="h-12 rounded-lg bg-slate-200 text-slate-500 text-lg font-semibold cursor-not-allowed"
                       >
                         Max
                       </button>
@@ -572,20 +583,20 @@ export default function MarketDetail({ params }) {
                   )}
                 </div>
 
-                {error && <div className="text-red-400 mt-4 text-sm">{error}</div>}
-                {success && <div className="text-green-400 mt-4 text-sm">{success}</div>}
+                {error && <div className="text-red-600 mt-4 text-sm">{error}</div>}
+                {success && <div className="text-emerald-700 mt-4 text-sm">{success}</div>}
 
                 {amountNum > 0 && actionPrice > 0 && (
-                  <div className="mt-6 border-t border-[#0b75c0] pt-4">
-                    <div className="flex items-center justify-between text-lg text-gray-300">
+                  <div className="mt-6 border-t border-[#e6ddcb] pt-4">
+                    <div className="flex items-center justify-between text-lg text-slate-800">
                       <span className="flex items-center gap-2">
                         {summaryTitle} <span role="img" aria-label="money">💵</span>
                       </span>
-                      <span className="text-3xl font-semibold text-green-400">
+                      <span className="text-3xl font-semibold text-emerald-700">
                         {summaryValueLabel}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-400 mt-2">
+                    <div className="flex items-center gap-2 text-sm text-slate-600 mt-2">
                       <span>{summarySubLabel}</span>
                     </div>
                   </div>
@@ -594,26 +605,26 @@ export default function MarketDetail({ params }) {
                 <button
                   onClick={handlePlaceOrder}
                   disabled={placing}
-                  className="w-full mt-6 py-4 bg-[#00a6ff] hover:bg-[#0094e6] disabled:bg-[#0fa0ff] disabled:cursor-not-allowed text-white text-xl font-semibold rounded-xl transition-colors shadow-[0_12px_30px_rgba(0,166,255,0.35)]"
+                  className="w-full mt-6 py-4 text-white text-xl font-semibold rounded-xl transition-colors shadow-sm bg-[#4b6ea9] hover:bg-[#3f5e9c] disabled:bg-[#c9d4ea] disabled:text-[#3f5e9c] disabled:cursor-not-allowed"
                 >
                   {placing ? "Submitting..." : `${side === "buy" ? "Buy" : "Sell"} ${actionLabel} ${selectedLabel}`}
                 </button>
               </div>
 
               {/* Related Markets placeholder */}
-              <div className="bg-[#3f6f56] rounded-lg border border-[#2f4b3c] p-6">
-                <div className="flex gap-4 border-b border-[#2f4b3c] mb-4">
-                  <button className="pb-2 border-b-2 border-white text-white font-semibold text-sm">
+              <div className="bg-[#f9f6ee] text-slate-900 rounded-lg border border-[#e6ddcb] p-6 shadow-sm">
+                <div className="flex gap-4 border-b border-[#e6ddcb] mb-4">
+                  <button className="pb-2 border-b-2 border-[#4b6ea9] text-[#2f4b7c] font-semibold text-sm">
                     All
                   </button>
-                  <button className="pb-2 text-gray-400 hover:text-white text-sm transition-colors">
+                  <button className="pb-2 text-slate-600 hover:text-[#2f4b7c] text-sm transition-colors">
                     Politics
                   </button>
-                  <button className="pb-2 text-gray-400 hover:text-white text-sm transition-colors">
+                  <button className="pb-2 text-slate-600 hover:text-[#2f4b7c] text-sm transition-colors">
                     Markets
                   </button>
                 </div>
-                <div className="space-y-3 text-gray-300 text-sm">更多关联市场即将上线</div>
+                <div className="space-y-3 text-slate-700 text-sm">更多关联市场即将上线</div>
               </div>
             </div>
           </div>

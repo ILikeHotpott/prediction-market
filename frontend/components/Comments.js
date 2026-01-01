@@ -142,23 +142,20 @@ export default function Comments({ marketId, user, openAuthModal }) {
   )
 
   return (
-    <Card
-      className="text-white shadow-2xl border border-[#2f4b3c] backdrop-blur"
-      style={{ backgroundColor: "var(--app-background)" }}
-    >
+    <Card className="text-slate-900 shadow-md border border-[#e6ddcb] bg-[#f9f6ee]">
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <CardTitle className="text-xl font-semibold text-white">Comments</CardTitle>
-            <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-200">
+            <CardTitle className="text-xl font-semibold text-slate-900">Comments</CardTitle>
+            <span className="rounded-full bg-white px-3 py-1 text-sm text-slate-800 border border-[#e6ddcb]">
               {totalCount.toLocaleString()}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-300 hover:text-white">
+          <div className="flex items-center gap-2 text-sm text-slate-700">
+            <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
               Top Holders
             </Button>
-            <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-300 hover:text-white">
+            <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
               Activity
             </Button>
           </div>
@@ -172,7 +169,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
             value={drafts.root || ""}
             onChange={(e) => updateDraft("root", e.target.value)}
             placeholder={user ? "Type your comment..." : "Sign in to add a comment"}
-            className="w-full bg-transparent border border-white/10 text-white placeholder:text-slate-500 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/70 resize-none"
+            className="w-full bg-white border border-[#e6ddcb] text-slate-900 placeholder:text-slate-500 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4b6ea9]/60 resize-none"
             disabled={!user}
           />
           <div className="flex justify-end pt-3">
@@ -180,7 +177,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
               onClick={() => submitComment(null)}
               disabled={postingIds.root || !user}
               size="sm"
-              className="px-6 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-full shadow-lg shadow-blue-500/30"
+              className="px-6 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white font-semibold rounded-full shadow-sm"
             >
               {postingIds.root ? "Posting..." : "Post"}
             </Button>
@@ -189,11 +186,11 @@ export default function Comments({ marketId, user, openAuthModal }) {
 
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-3">
-            <span className="text-slate-400 text-sm">Filter</span>
-            <div className="inline-flex rounded-full bg-white/10 border border-white/10 p-1">
+            <span className="text-slate-700 text-sm">Filter</span>
+            <div className="inline-flex rounded-full bg-white border border-[#e6ddcb] p-1">
               <button
                 className={`px-4 py-1 text-sm rounded-full transition-colors ${
-                  !holdersOnly ? "bg-white text-slate-900 shadow" : "text-slate-200 hover:text-white"
+                  !holdersOnly ? "bg-[#4b6ea9] text-white shadow-sm" : "text-slate-700 hover:text-slate-900"
                 }`}
                 onClick={() => setHoldersOnly(false)}
                 type="button"
@@ -202,7 +199,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
               </button>
               <button
                 className={`px-4 py-1 text-sm rounded-full transition-colors ${
-                  holdersOnly ? "bg-white text-slate-900 shadow" : "text-slate-200 hover:text-white"
+                  holdersOnly ? "bg-[#4b6ea9] text-white shadow-sm" : "text-slate-700 hover:text-slate-900"
                 }`}
                 onClick={() => setHoldersOnly(true)}
                 type="button"
@@ -213,14 +210,13 @@ export default function Comments({ marketId, user, openAuthModal }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 text-sm">Sort</span>
+            <span className="text-slate-700 text-sm">Sort</span>
             <Select value={sort} onValueChange={(val) => setSort(val)}>
-              <SelectTrigger className="w-36 bg-white/10 border border-white/15 text-white rounded-full px-4 py-2 h-10 focus:ring-2 focus:ring-blue-500/70">
+              <SelectTrigger className="w-36 bg-white border border-[#e6ddcb] text-slate-900 rounded-full px-4 py-2 h-10 focus:ring-2 focus:ring-[#4b6ea9]/60">
                 <SelectValue placeholder="Sort" />
               </SelectTrigger>
               <SelectContent
-                className="text-white border border-[#2f4b3c]"
-                style={{ backgroundColor: "var(--app-background)" }}
+                className="text-slate-900 border border-[#e6ddcb] bg-white"
               >
                 <SelectItem value="newest">Newest</SelectItem>
                 <SelectItem value="oldest">Oldest</SelectItem>
@@ -234,11 +230,11 @@ export default function Comments({ marketId, user, openAuthModal }) {
           </div>
         </div>
 
-        {error && <div className="text-red-400 text-sm">{error}</div>}
+        {error && <div className="text-red-600 text-sm">{error}</div>}
         {loading && comments.length === 0 ? (
           renderSkeletons()
         ) : filteredComments.length === 0 ? (
-          <div className="text-slate-400">No comments yet.</div>
+          <div className="text-slate-700">No comments yet.</div>
         ) : (
           <div className="space-y-4">
             {filteredComments.map((comment) => (
@@ -306,7 +302,7 @@ function CommentItem({
     : []
 
   return (
-    <div className="group relative p-4 rounded-xl transition-colors">
+    <div className="group relative p-4 rounded-xl transition-colors bg-white border border-[#e6ddcb]">
       <div className="flex gap-3">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm flex-shrink-0 overflow-hidden">
           {avatarUrl ? (
@@ -325,11 +321,11 @@ function CommentItem({
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-white font-medium">{comment.user?.display_name || "User"}</span>
+            <span className="text-slate-900 font-medium">{comment.user?.display_name || "User"}</span>
             {primaryHolding && (
               <div className="relative">
                 <button
-                  className="text-xs bg-emerald-500/15 text-emerald-200 px-2 py-1 rounded-full flex items-center gap-1 shadow-sm"
+                  className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full flex items-center gap-1 shadow-sm border border-emerald-200"
                   onClick={() => setShowHoldings((prev) => !prev)}
                 >
                   <span>
@@ -338,31 +334,28 @@ function CommentItem({
                   {hasMultipleHoldings && (showHoldings ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                 </button>
                 {hasMultipleHoldings && showHoldings && (
-                  <div
-                    className="absolute z-10 mt-2 w-64 rounded-lg shadow-lg p-3 space-y-2 border border-[#2f4b3c]"
-                    style={{ backgroundColor: "var(--app-background)" }}
-                  >
+                  <div className="absolute z-10 mt-2 w-64 rounded-lg shadow-lg p-3 space-y-2 border border-[#e6ddcb] bg-white">
                     {comment.holdings.map((h, idx) => (
-                      <div key={`${h.option_id}-${idx}`} className="text-xs text-gray-200 flex justify-between">
-                        <span className="text-gray-300">{h.option_title || "Position"}</span>
-                        <span className="text-gray-100">{formatAmount(h.cost_basis)}</span>
+                      <div key={`${h.option_id}-${idx}`} className="text-xs text-slate-900 flex justify-between">
+                        <span className="text-slate-800">{h.option_title || "Position"}</span>
+                        <span className="text-slate-900 font-semibold">{formatAmount(h.cost_basis)}</span>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
             )}
-            <span className="text-gray-500 text-xs">• {formatTimeAgo(comment.created_at)}</span>
+            <span className="text-slate-600 text-xs">• {formatTimeAgo(comment.created_at)}</span>
           </div>
-          <p className="text-slate-100 mt-2 leading-relaxed">
-            {parentUserName ? <span className="text-blue-400 mr-2">@{parentUserName}</span> : null}
+          <p className="text-slate-900 mt-2 leading-relaxed">
+            {parentUserName ? <span className="text-[#3f5e9c] mr-2">@{parentUserName}</span> : null}
             {comment.content}
           </p>
-          <div className="flex items-center gap-2 mt-3 text-gray-400">
+          <div className="flex items-center gap-2 mt-3 text-slate-700">
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 gap-1 text-slate-300 hover:text-white"
+              className="h-8 gap-1 text-slate-700 hover:text-slate-900"
               type="button"
             >
               <Heart className="w-4 h-4" />
@@ -372,7 +365,7 @@ function CommentItem({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1 text-slate-300 hover:text-white"
+                className="h-8 gap-1 text-slate-700 hover:text-slate-900"
                 onClick={() => {
                   setReplyTarget(draftKey)
                   updateDraft(draftKey, replyDraft || "")
@@ -392,14 +385,14 @@ function CommentItem({
                 value={replyDraft}
                 onChange={(e) => updateDraft(draftKey, e.target.value)}
                 placeholder="Reply to this comment..."
-                className="bg-transparent text-white placeholder:text-slate-500 border border-white/15 rounded-xl focus-visible:ring-blue-500/70"
+                className="bg-white text-slate-900 placeholder:text-slate-500 border border-[#e6ddcb] rounded-xl focus-visible:ring-[#4b6ea9]/60"
               />
               <div className="flex justify-end">
                 <Button
                   onClick={() => submitComment(comment.id)}
                   disabled={postingIds[draftKey]}
                   size="sm"
-                  className="px-5 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-full shadow-lg shadow-blue-500/30"
+                  className="px-5 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white font-semibold rounded-full shadow-sm"
                 >
                   {postingIds[draftKey] ? "Posting..." : "Reply"}
                 </Button>

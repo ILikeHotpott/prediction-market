@@ -7,7 +7,7 @@
 
 :root {
   /* Felt table base */
-  --app-background: #4E7C60; /* Felt */
+  --app-background: #446f55; /* Slightly deeper felt */
   --background: var(--app-background);
   --foreground: #F3E1B6; /* Cream */
 
@@ -57,7 +57,7 @@
 }
 
 .dark {
-  --app-background: #4E7C60;
+  --app-background: #446f55;
   --background: var(--app-background);
   --foreground: #F3E1B6;
   --card: #445FAE;
@@ -164,146 +164,445 @@ a,
   100% { background-position: -200% 0; }
 }
 
-/* Vintage card shell for casino signage */
-.vintage-card-shell {
+.market-card {
   position: relative;
-  border: 2px solid #243A2F;
-  border-radius: 26px;
-  background: #1F2B24;
-  padding: 8px;
-  box-shadow: 0 10px 0 rgba(0, 0, 0, 0.25), 0 18px 30px rgba(0, 0, 0, 0.18);
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
-}
-
-.vintage-card-shell:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 14px 0 rgba(0, 0, 0, 0.25), 0 24px 34px rgba(0, 0, 0, 0.24);
-}
-
-.vintage-card-frame {
-  border: 2px solid rgba(243, 225, 182, 0.65);
-  border-radius: 22px;
-  padding: 8px;
-  background: #243A2F;
-}
-
-.vintage-card-panel {
-  border-radius: 18px;
-  background: linear-gradient(180deg, #5272C4 0%, #445FAE 40%, #354A8E 100%);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25), inset 0 -14px 22px rgba(0, 0, 0, 0.25);
-  color: #F3E1B6;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
-  overflow: hidden;
+  gap: 10px;
+  border-radius: 22px;
+  border: 1px solid #e6ddcb;
+  background: #f9f6ee;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 -1px 0 rgba(209, 196, 175, 0.5) inset;
+  padding: 16px 18px 14px;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform, box-shadow, border-color;
+  transition:
+    transform 140ms cubic-bezier(0.22, 0.8, 0.36, 1),
+    box-shadow 140ms cubic-bezier(0.22, 0.8, 0.36, 1),
+    border-color 140ms ease;
+  height: 200px;
 }
 
-.vintage-card-header {
+.market-card--standalone {
+  gap: 6px;
+  padding-bottom: 10px;
+}
+
+.market-card:hover {
+  transform: translate3d(0, -6px, 0);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 -1px 0 rgba(209, 196, 175, 0.6) inset;
+  border-color: #dccfb6;
+}
+
+.market-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.market-card-header--standalone {
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.market-card-header-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.market-card-chance {
+  margin-left: auto;
+  flex-shrink: 1;
+  max-width: 110px;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+}
+
+.chance-gauge {
+  position: relative;
+  width: 110px;
+  height: 86px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  pointer-events: none;
+  transform: translateY(-30px);
+}
+
+.chance-gauge__chart {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.chance-gauge__value {
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.18) 0%, rgba(0, 0, 0, 0.28) 100%);
-  border-bottom: 1px solid rgba(243, 225, 182, 0.25);
-  border-radius: 14px 14px 10px 10px;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.badge-plaque {
+.chance-gauge__percent {
+  font-weight: 800;
+  color: #1f2937;
+  font-size: 15px;
+}
+
+.chance-gauge__label {
+  font-size: 11px;
+  color: #6b7280;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.market-card-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  background: #1F2B24;
-  border: 2px solid rgba(243, 225, 182, 0.55);
-  border-radius: 12px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
-  color: #F3E1B6;
-}
-
-.badge-rivet {
-  width: 6px;
-  height: 6px;
-  background: #F2C35B;
-  border: 1px solid #1F2B24;
+  padding: 7px 12px;
   border-radius: 999px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(120deg, #1e3a8a 0%, #2563eb 80%);
+  color: #fdfbf6;
+  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.45);
 }
 
-.vintage-card-body {
-  padding: 12px 14px 10px;
+.market-card-pip {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.15);
+}
+
+.market-card-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.market-card-label {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.market-card-title {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #1f2937;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(1.3em * 2);
+  max-height: calc(1.3em * 2);
+  word-break: break-word;
+}
+
+.market-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.market-card-body--standalone {
+  flex: 0 0 auto;
+  margin-top: -4px;
+}
+
+.market-card--standalone .market-card-actions {
+  margin-top: 8px;
+}
+
+.market-card--standalone .market-card-footer {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.binary-outcome-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex: 1;
 }
 
-.vintage-divider {
-  border-top: 1px solid rgba(243, 225, 182, 0.28);
+.binary-outcome {
+  padding: 14px;
+  border-radius: 16px;
+  background: #fffefb;
+  border: 1px solid #e6ddcb;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.chip-button {
-  position: relative;
-  width: 100%;
-  border-radius: 999px;
-  border: 2px solid rgba(243, 225, 182, 0.75);
-  color: #F3E1B6;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  padding: 11px 14px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25), 0 6px 0 rgba(0, 0, 0, 0.35);
-  background-size: 180% 180%;
-  overflow: hidden;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
-}
-
-.chip-button::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0, rgba(255, 255, 255, 0.08) 10px, rgba(255, 255, 255, 0.02) 10px, rgba(255, 255, 255, 0.02) 20px);
-  mix-blend-mode: overlay;
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.chip-button:active {
-  transform: translateY(3px);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4), 0 2px 0 rgba(0, 0, 0, 0.25);
-}
-
-.chip-button.yes {
-  background: linear-gradient(150deg, #2F6B4A 0%, #25563C 45%, #1F2B24 100%);
-}
-
-.chip-button.no {
-  background: linear-gradient(150deg, #B24A3F 0%, #8D3A33 45%, #1F2B24 100%);
-}
-
-.chip-button.small {
-  padding: 7px 10px;
-  font-size: 12px;
-}
-
-.outcome-row {
+.binary-outcome__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  transition: background 0.18s ease;
+  gap: 10px;
 }
 
-.outcome-row:hover {
-  background: rgba(255, 255, 255, 0.08);
+.binary-outcome__name {
+  font-weight: 700;
+  color: #1f2937;
+  font-size: 15px;
+}
+
+.binary-outcome__prob {
+  font-weight: 800;
+  color: #1f2937;
+  font-size: 20px;
+}
+
+.binary-outcome__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.binary-outcome__bar {
+  flex: 1;
+  min-width: 180px;
+  height: 10px;
+  border-radius: 999px;
+  background: #efe7d8;
+  overflow: hidden;
+  border: 1px solid #e6ddcb;
+}
+
+.binary-outcome__bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2f6b4a 0%, #6c9b78 100%);
+  border-radius: 999px;
+}
+
+.binary-outcome__buttons {
+  display: inline-flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.market-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.market-chip {
+  position: relative;
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid #d7cbb4;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 13px 17px;
+  background: #f9f6ee;
+  color: #1f2937;
+  box-shadow: none;
+  transition: transform 0.12s ease, filter 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.market-chip:hover {
+  transform: translateY(-2px);
+  box-shadow: none;
+}
+
+.market-chip:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+.market-chip.yes {
+  color: #0f2418;
+  background: #6c9b78;
+  border-color: #8ab49a; /* light outline */
+}
+
+.market-chip.no {
+  color: #3d0f0f;
+  background: #c65a5a;
+  border-color: #d98f8f; /* light outline */
+}
+
+.market-chip.yes:hover {
+  background: #5b8567;
+  border-color: #769f83;
+}
+
+.market-chip.no:hover {
+  background: #b34b4b;
+  border-color: #c07575;
+}
+
+.market-chip.mini {
+  padding: 6px 12px;
+  font-size: 11px;
+  min-width: 50px;
+  font-weight: 700;
+}
+
+.market-outcome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  padding-right: 2px;
+  overflow-y: auto;
+}
+
+.market-outcome {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: none;
+}
+
+.market-outcome:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.market-outcome-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.market-outcome-name {
+  flex: 1;
+  min-width: 0;
+  color: #2f2a1f;
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.market-outcome-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.market-outcome-prob {
+  width: 50px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 16px;
+  color: #1f2937;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.market-outcome-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #efe7d8;
+  overflow: hidden;
+  border: 1px solid #e6ddcb;
+}
+
+.market-outcome-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2f6b4a 0%, #6c9b78 100%);
+  border-radius: 999px;
+}
+
+.market-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  border-top: 1px solid #eadfcb;
+  padding-top: 2px;
+  font-size: 10.5px;
+  line-height: 1.15;
+  color: #4b5563;
+}
+
+.market-volume {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+}
+
+.market-footer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #9a4e00;
+}
+
+.market-footer-icon {
+  padding: 3px 5px;
+  border-radius: 8px;
+  background: rgba(154, 78, 0, 0.08);
+  border: 1px solid rgba(154, 78, 0, 0.2);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.market-footer-icon:hover {
+  transform: translateY(-2px);
+  background: rgba(154, 78, 0, 0.15);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
 }
 
 .slot-column {
   position: relative;
   overflow: hidden;
   contain: layout paint;
+  padding: 8px 0 6px; /* allow hover lift without clipping */
+}
+
+.slot-track {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+.slot-item {
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .slot-column--spinning::before,
@@ -319,12 +618,12 @@ a,
 
 .slot-column--spinning::before {
   top: 0;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), transparent);
+  background: none;
 }
 
 .slot-column--spinning::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(15, 23, 42, 0.9), transparent);
+  background: none;
 }
 
 .slot-column--spinning .slot-track {
@@ -334,8 +633,8 @@ a,
 }
 
 .slot-column--spinning .slot-item {
-  filter: blur(1px);
-  opacity: 0.92;
+  opacity: 0.95;
+  transform: translateZ(0);
 }
 
 @keyframes slotScroll {

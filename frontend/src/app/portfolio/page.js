@@ -285,13 +285,16 @@ export default function PortfolioPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f172a]">
+    <div className="min-h-screen bg-background text-slate-900">
       <Navigation />
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6">
         {!user && (
-          <div className="text-center text-gray-300 py-10">
+          <div className="text-center text-slate-800 py-10">
             请先登录。
-            <Button className="ml-3" onClick={() => openAuthModal("login")}>
+            <Button
+              className="ml-3 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white border border-[#3f5e9c] shadow-sm"
+              onClick={() => openAuthModal("login")}
+            >
               登录
             </Button>
           </div>
@@ -302,9 +305,9 @@ export default function PortfolioPage() {
             {actionMessage && <div className="text-green-400 mb-4">{actionMessage}</div>}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-              <Card className="bg-[#1e293b] border-gray-700">
+              <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-gray-300 text-sm">Portfolio</CardTitle>
+                  <CardTitle className="text-slate-800 text-sm">Portfolio</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {showPortfolioSkeleton ? (
@@ -314,17 +317,17 @@ export default function PortfolioPage() {
                     </>
                   ) : (
                     <>
-                      <div className="text-3xl font-bold text-white">${totalValue.toFixed(2)}</div>
-                      <div className="text-sm text-gray-400 mt-2">
+                      <div className="text-3xl font-bold text-slate-900">${totalValue.toFixed(2)}</div>
+                      <div className="text-sm text-slate-700 mt-2">
                         Cash: ${cashValue.toFixed(2)} | Holdings: ${holdingsValue.toFixed(2)}
                       </div>
                     </>
                   )}
                 </CardContent>
               </Card>
-              <Card className="bg-[#1e293b] border-gray-700">
+              <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-gray-300 text-sm">Cash</CardTitle>
+                  <CardTitle className="text-slate-800 text-sm">Cash</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {showPortfolioSkeleton ? (
@@ -334,15 +337,15 @@ export default function PortfolioPage() {
                     </>
                   ) : (
                     <>
-                      <div className="text-3xl font-bold text-white">${cashValue.toFixed(2)}</div>
-                      <div className="text-sm text-gray-400 mt-2">Token: {balance?.token || "USDC"}</div>
+                      <div className="text-3xl font-bold text-slate-900">${cashValue.toFixed(2)}</div>
+                      <div className="text-sm text-slate-700 mt-2">Token: {balance?.token || "USDC"}</div>
                     </>
                   )}
                 </CardContent>
               </Card>
-              <Card className="bg-[#1e293b] border-gray-700">
+              <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-gray-300 text-sm">Actions</CardTitle>
+                  <CardTitle className="text-slate-800 text-sm">Actions</CardTitle>
                 </CardHeader>
                 <CardContent className="flex gap-3">
                   {showPortfolioSkeleton ? (
@@ -352,26 +355,34 @@ export default function PortfolioPage() {
                     </>
                   ) : (
                     <>
-                      <Button className="flex-1 bg-blue-600 hover:bg-blue-700">Deposit</Button>
-                      <Button className="flex-1 bg-gray-700 hover:bg-gray-600">Withdraw</Button>
+                      <Button className="flex-1 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white border border-[#3f5e9c] shadow-sm">
+                        Deposit
+                      </Button>
+                      <Button className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-900 border border-[#e6ddcb]">
+                        Withdraw
+                      </Button>
                     </>
                   )}
                 </CardContent>
               </Card>
             </div>
 
-            <div className="flex items-center gap-4 mb-4 border-b border-gray-700 pb-2">
+            <div className="flex items-center gap-4 mb-4 border-b border-[#e6ddcb] pb-2">
               <button
-                className={`pb-2 text-sm font-semibold ${
-                  activeTab === "positions" ? "text-white border-b-2 border-blue-500" : "text-gray-400"
+                className={`pb-2 text-sm font-semibold transition-colors ${
+                  activeTab === "positions"
+                    ? "text-slate-900 border-b-2 border-[#4b6ea9]"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
                 onClick={() => setActiveTab("positions")}
               >
                 Positions
               </button>
               <button
-                className={`pb-2 text-sm font-semibold ${
-                  activeTab === "history" ? "text-white border-b-2 border-blue-500" : "text-gray-400"
+                className={`pb-2 text-sm font-semibold transition-colors ${
+                  activeTab === "history"
+                    ? "text-slate-900 border-b-2 border-[#4b6ea9]"
+                    : "text-slate-600 hover:text-slate-900"
                 }`}
                 onClick={() => setActiveTab("history")}
               >
@@ -380,15 +391,15 @@ export default function PortfolioPage() {
             </div>
 
             {activeTab === "positions" && (
-              <Card className="bg-[#1e293b] border-gray-700 mb-6">
+              <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md mb-6">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-white">Positions</CardTitle>
+                  <CardTitle className="text-slate-900">Positions</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   {showPortfolioSkeleton ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm text-left text-gray-300">
-                        <thead className="bg-[#223144] text-gray-400 uppercase text-xs">
+                      <table className="w-full text-sm text-left text-slate-900">
+                        <thead className="bg-[#f2eadc] text-slate-700 uppercase text-xs">
                           <tr>
                             <th className="px-4 py-3">Market</th>
                             <th className="px-4 py-3">Price</th>
@@ -430,8 +441,8 @@ export default function PortfolioPage() {
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm text-left text-gray-300">
-                        <thead className="bg-[#223144] text-gray-400 uppercase text-xs">
+                      <table className="w-full text-sm text-left text-slate-900">
+                        <thead className="bg-[#f2eadc] text-slate-700 uppercase text-xs">
                           <tr>
                             <th className="px-4 py-3">Market</th>
                             <th className="px-4 py-3">Price</th>
@@ -443,16 +454,16 @@ export default function PortfolioPage() {
                         </thead>
                         <tbody>
                           {positions.map((p, idx) => (
-                            <tr key={idx} className="border-b border-gray-700 last:border-0">
-                              <td className="px-4 py-3 text-white">
+                            <tr key={idx} className="border-b border-[#e6ddcb] last:border-0">
+                              <td className="px-4 py-3 text-slate-900">
                                 <Link
                                   href={`/market/${p.market_id}`}
-                                  className="font-semibold text-white hover:text-blue-300"
+                                  className="font-semibold text-slate-900 hover:text-red-600"
                                   title={p.event_title || p.market_title}
                                 >
                                   {truncateText(p.event_title || p.market_title || "", 60)}
                                 </Link>
-                                <div className="flex items-center gap-2 text-sm text-gray-400">
+                                <div className="flex items-center gap-2 text-sm text-slate-700">
                                   <span
                                     className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                                       String(p.option_title || "").toLowerCase() === "no"
@@ -462,7 +473,7 @@ export default function PortfolioPage() {
                                   >
                                     {p.option_title}
                                   </span>
-                                  <span className="text-gray-500">{Number(p.shares).toFixed(2)} shares</span>
+                                  <span className="text-slate-700">{Number(p.shares).toFixed(2)} shares</span>
                                 </div>
                               </td>
                               <td className="px-4 py-3">
@@ -477,7 +488,7 @@ export default function PortfolioPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <Button
-                                  className="bg-blue-600 hover:bg-blue-700 h-9 px-4"
+                                  className="bg-[#4b6ea9] hover:bg-[#3f5e9c] h-9 px-4 text-white border border-[#3f5e9c] shadow-sm"
                                   disabled={sellingId === p.option_id}
                                   onClick={() => handleSellPosition(p)}
                                 >
@@ -488,7 +499,7 @@ export default function PortfolioPage() {
                           ))}
                           {!positions.length && (
                             <tr>
-                              <td className="px-4 py-4 text-center text-gray-500" colSpan={7}>
+                              <td className="px-4 py-4 text-center text-slate-700" colSpan={7}>
                                 No positions yet.
                               </td>
                             </tr>
@@ -502,14 +513,14 @@ export default function PortfolioPage() {
             )}
 
             {activeTab === "history" && (
-              <Card className="bg-[#1e293b] border-gray-700">
+              <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-white">History</CardTitle>
+                  <CardTitle className="text-slate-900">History</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto" style={{ minHeight: historyTableMinHeight }}>
-                    <table className="w-full text-sm text-left text-gray-300">
-                      <thead className="bg-[#223144] text-gray-400 uppercase text-xs">
+                    <table className="w-full text-sm text-left text-slate-900">
+                      <thead className="bg-[#f2eadc] text-slate-700 uppercase text-xs">
                         <tr>
                           <th className="px-5 py-3">Activity</th>
                           <th className="px-5 py-3">Market</th>
@@ -539,7 +550,7 @@ export default function PortfolioPage() {
                               </tr>
                             ))
                           : pagedHistory.map((h) => (
-                              <tr key={h.id} className="border-b border-gray-700 last:border-0">
+                              <tr key={h.id} className="border-b border-[#e6ddcb] last:border-0">
                                 <td className="px-5 py-3">
                                   <span
                                     className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
@@ -574,12 +585,12 @@ export default function PortfolioPage() {
                                       <>
                                         <Link
                                           href={`/market/${h.market_id}`}
-                                          className="text-white font-medium hover:text-blue-300"
+                                          className="text-slate-900 font-medium hover:text-red-600"
                                           title={eventTitle}
                                         >
                                           {truncateText(eventTitle, 80)}
                                         </Link>
-                                        <div className="flex items-center gap-3 text-sm text-gray-400 mt-1 flex-wrap">
+                                        <div className="flex items-center gap-3 text-sm text-slate-700 mt-1 flex-wrap">
                                           {h.option_title ? (
                                             <span
                                               className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
@@ -592,7 +603,7 @@ export default function PortfolioPage() {
                                             </span>
                                           ) : null}
                                           {Number(h.shares_out || h.shares_in || 0) ? (
-                                            <span className="text-gray-400">
+                                            <span className="text-slate-700">
                                               {Number(h.shares_out || h.shares_in || 0).toFixed(2)} shares
                                             </span>
                                           ) : null}
@@ -616,14 +627,14 @@ export default function PortfolioPage() {
                                     )
                                   })()}
                                 </td>
-                                <td className="px-5 py-3 text-right text-gray-400">
+                                <td className="px-5 py-3 text-right text-slate-700">
                                   {h.created_at ? new Date(h.created_at).toLocaleString() : "—"}
                                 </td>
                               </tr>
                             ))}
                         {!showHistorySkeleton && !history.length && (
                           <tr>
-                            <td className="px-4 py-4 text-center text-gray-500" colSpan={4}>
+                            <td className="px-4 py-4 text-center text-slate-700" colSpan={4}>
                               No history yet.
                             </td>
                           </tr>
@@ -631,7 +642,7 @@ export default function PortfolioPage() {
                       </tbody>
                     </table>
                   </div>
-                  <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700 text-sm text-gray-400">
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-[#e6ddcb] text-sm text-slate-700">
                     <div className="whitespace-nowrap">
                       {historyTotal
                         ? `Showing ${(historyPage - 1) * historyPageSize + 1}-${Math.min(
@@ -644,6 +655,7 @@ export default function PortfolioPage() {
                       <PaginationContent>
                         <PaginationItem>
                           <PaginationPrevious
+                            className="text-slate-800"
                             disabled={historyPage <= 1 || historyLoading}
                             onClick={() => goToPage(historyPage - 1)}
                           >
@@ -654,6 +666,7 @@ export default function PortfolioPage() {
                           typeof p === "number" ? (
                             <PaginationItem key={p}>
                               <PaginationLink
+                                className="text-slate-800 data-[active=true]:bg-[#4b6ea9] data-[active=true]:text-white"
                                 isActive={p === historyPage}
                                 onClick={() => goToPage(p)}
                                 disabled={historyPage === p || historyLoading}
@@ -669,6 +682,7 @@ export default function PortfolioPage() {
                         )}
                         <PaginationItem>
                           <PaginationNext
+                            className="text-slate-800"
                             disabled={historyPage >= historyPageCount || historyLoading}
                             onClick={() => goToPage(historyPage + 1)}
                           >
