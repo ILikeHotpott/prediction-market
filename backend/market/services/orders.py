@@ -63,6 +63,7 @@ def parse_sell_payload(payload):
     shares_raw = payload.get("shares")
     amount_out_raw = payload.get("amount_out")  # desired net proceeds (optional)
     min_amount_out_raw = payload.get("min_amount_out")  # slippage floor (optional)
+    sell_all = payload.get("sell_all", False)  # sell all shares (handles dust)
 
     shares = None
     amount_out = None
@@ -80,12 +81,13 @@ def parse_sell_payload(payload):
         if err:
             return None, err
 
-    if shares is None and amount_out is None:
-        return None, JsonResponse({"error": "shares or amount_out is required"}, status=400)
+    if not sell_all and shares is None and amount_out is None:
+        return None, JsonResponse({"error": "shares, amount_out, or sell_all is required"}, status=400)
 
     return {
         "shares": shares,
         "amount_out": amount_out,
+        "sell_all": bool(sell_all),
         "token": payload.get("token") or "USDC",
         "option_id": payload.get("option_id"),
         "option_index": payload.get("option_index"),

@@ -4,6 +4,7 @@ from .events import Event
 from .ledger import (
     BalanceSnapshot,
     ChainEvent,
+    MarketSettlement,
     OrderIntent,
     Position,
     Trade,

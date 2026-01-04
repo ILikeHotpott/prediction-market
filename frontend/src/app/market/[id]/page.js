@@ -322,9 +322,15 @@ export default function MarketDetail({ params }) {
       const endpoint = isSellSide
         ? `${backendBase}/api/markets/${selectedMarket.id}/orders/sell/`
         : `${backendBase}/api/markets/${selectedMarket.id}/orders/buy/`
+
+      // Check if selling all shares (within small tolerance)
+      const currentShares = userSharesForOption(selectedOption)
+      const isSellAll = isSellSide && Math.abs(amountNum - currentShares) < 0.0001
+
       const body = isSellSide
         ? {
-            shares: String(amountNum),
+            shares: isSellAll ? undefined : String(amountNum),
+            sell_all: isSellAll,
             option_id: selectedOption.id,
             token: "USDC",
             client_nonce: nonce,
@@ -452,12 +458,14 @@ export default function MarketDetail({ params }) {
             <div className="lg:col-span-2 space-y-6">
               <MarketChart
                 market={selectedMarket}
+                eventId={eventData?.id}
                 eventTitle={eventData?.title}
+                eventType={eventData?.group_rule || "standalone"}
                 markets={marketsSorted}
                 hideOutcomes={hideOutcomes}
                 onSelectOutcome={selectOption}
                 onSelectMarket={selectMarket}
-                selectedOptionId={selectedOptionId}
+                selectedOptionId={selectedMarketId}
                 selectedAction={outcomeAction}
               />
 
@@ -623,18 +631,35 @@ export default function MarketDetail({ params }) {
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 gap-3">
-                      {[25, 50].map((pct) => (
-                        <button
-                          key={pct}
-                          disabled
-                          className="h-12 rounded-lg bg-slate-200 text-slate-500 text-lg font-semibold cursor-not-allowed"
-                        >
-                          {pct}%
-                        </button>
-                      ))}
+                      {[25, 50].map((pct) => {
+                        const currentShares = userSharesForOption(selectedOption)
+                        const pctShares = currentShares * pct / 100
+                        return (
+                          <button
+                            key={pct}
+                            onClick={() => setAmount(pctShares.toFixed(2))}
+                            disabled={currentShares <= 0}
+                            className={`h-12 rounded-lg text-lg font-semibold transition-colors ${
+                              currentShares > 0
+                                ? "bg-white border border-[#e6ddcb] text-slate-900 hover:bg-rose-50"
+                                : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                            }`}
+                          >
+                            {pct}%
+                          </button>
+                        )
+                      })}
                       <button
-                        disabled
-                        className="h-12 rounded-lg bg-slate-200 text-slate-500 text-lg font-semibold cursor-not-allowed"
+                        onClick={() => {
+                          const currentShares = userSharesForOption(selectedOption)
+                          setAmount(currentShares.toFixed(8))
+                        }}
+                        disabled={userSharesForOption(selectedOption) <= 0}
+                        className={`h-12 rounded-lg text-lg font-semibold transition-colors ${
+                          userSharesForOption(selectedOption) > 0
+                            ? "bg-white border border-[#e6ddcb] text-slate-900 hover:bg-rose-50"
+                            : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                        }`}
                       >
                         Max
                       </button>

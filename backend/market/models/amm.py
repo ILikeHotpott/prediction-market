@@ -29,6 +29,10 @@ class AmmPool(models.Model):
     collateral_token = models.TextField()
     funding_amount = models.DecimalField(max_digits=40, decimal_places=18, default=0)
     collected_fee = models.DecimalField(max_digits=40, decimal_places=18, default=0)
+    # Initial funding amount (subsidy cap F). Used to compute b = F/ln(N).
+    collateral_amount = models.DecimalField(max_digits=40, decimal_places=18, default=0)
+    # Net cash from trading (buys - sell payouts). Primary source for settlement.
+    pool_cash = models.DecimalField(max_digits=40, decimal_places=18, default=0)
     fee_recipient_user = models.ForeignKey(
         "market.User",
         db_column="fee_recipient_user_id",

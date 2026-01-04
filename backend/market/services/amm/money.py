@@ -1,10 +1,13 @@
 import math
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from typing import List, Sequence, Union
 
 from .errors import QuoteInputError
 
 Number = Union[Decimal, int, float, str]
+
+# Shares precision: 8 decimal places
+SHARES_QUANT = Decimal("0.00000001")
 
 
 def _to_decimal(x: Number, field: str) -> Decimal:
@@ -44,4 +47,9 @@ def _bps_from_probabilities(probabilities: Sequence[float]) -> List[int]:
 def _quantize_money(x: Decimal, money_quant: Decimal, rounding) -> Decimal:
     # money_quant e.g. 0.01 / 0.000001
     return x.quantize(money_quant, rounding=rounding)
+
+
+def _quantize_shares(x: float) -> Decimal:
+    """Quantize shares to 8 decimal places, rounding down to be conservative."""
+    return Decimal(str(x)).quantize(SHARES_QUANT, rounding=ROUND_DOWN)
 

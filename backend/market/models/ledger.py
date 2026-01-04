@@ -207,3 +207,44 @@ class ChainEvent(models.Model):
         db_table = "chain_events"
 
 
+class MarketSettlement(models.Model):
+    """
+    Audit table recording market settlement details.
+    One settlement record per market (unique constraint on market_id).
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    market = models.OneToOneField(
+        "market.Market",
+        db_column="market_id",
+        on_delete=models.DO_NOTHING,
+        related_name="settlement",
+    )
+    resolved_option = models.ForeignKey(
+        "market.MarketOption",
+        db_column="resolved_option_id",
+        on_delete=models.DO_NOTHING,
+        related_name="settlements",
+    )
+    total_payout = models.DecimalField(max_digits=40, decimal_places=18, default=0)
+    pool_cash_used = models.DecimalField(max_digits=40, decimal_places=18, default=0)
+    collateral_used = models.DecimalField(max_digits=40, decimal_places=18, default=0)
+    settled_by = models.ForeignKey(
+        "market.User",
+        db_column="settled_by",
+        null=True,
+        blank=True,
+        on_delete=models.DO_NOTHING,
+        related_name="settlements_made",
+    )
+    settled_at = models.DateTimeField(default=timezone.now)
+    settlement_tx_id = models.TextField()
+
+    class Meta:
+        managed = False
+        db_table = "market_settlements"
+
+    def __str__(self) -> str:
+        return f"Settlement:{self.market_id}:{self.settlement_tx_id}"
+
+

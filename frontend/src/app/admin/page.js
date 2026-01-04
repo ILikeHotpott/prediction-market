@@ -4,6 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/AuthProvider";
+import ResolveMarketDialog from "@/components/admin/ResolveMarketDialog";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationPrevious,
+  PaginationNext,
+  PaginationEllipsis,
+} from "@/components/ui/pagination";
 
 const backendBase =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -12,7 +22,12 @@ export default function AdminMarketsPage() {
   const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState([]);
+  const [statusFilter, setStatusFilter] = useState("draft");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
   const [userRole, setUserRole] = useState(null);
+  const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
   const defaultStandaloneMarkets = [{ title: "Primary", sort_weight: 0 }];
   const defaultMultiMarkets = [
     { title: "Yes", sort_weight: 0 },
@@ -53,6 +68,34 @@ export default function AdminMarketsPage() {
       (form.amm_collateral_token || "").trim();
     return form.title && form.description && form.trading_deadline && marketsValid && ammValid;
   }, [form]);
+
+  const filteredEvents = useMemo(() => {
+    if (statusFilter === "all") return events;
+    return events.filter((e) => e.status === statusFilter);
+  }, [events, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / pageSize));
+  const pagedEvents = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredEvents.slice(start, start + pageSize);
+  }, [filteredEvents, currentPage, pageSize]);
+
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
+  const pageList = useMemo(() => {
+    if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const pages = [1];
+    if (currentPage > 3) pages.push("ellipsis-left");
+    const start = Math.max(2, currentPage - 1);
+    const end = Math.min(totalPages - 1, currentPage + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (currentPage < totalPages - 2) pages.push("ellipsis-right");
+    pages.push(totalPages);
+    return pages;
+  }, [totalPages, currentPage]);
 
   useEffect(() => {
     if (!user) return;
@@ -267,6 +310,32 @@ export default function AdminMarketsPage() {
     }
   }
 
+  async function handleResolveClick(eventId) {
+    setError("");
+    setSuccess("");
+    try {
+      // Fetch full event data with markets and options
+      const res = await fetch(`${backendBase}/api/events/${eventId}/`, {
+        headers: user ? { "X-User-Id": user.id } : {},
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "加载事件数据失败");
+        return;
+      }
+      setSelectedEvent(data);
+      setResolveDialogOpen(true);
+    } catch (err) {
+      setError("加载事件数据失败");
+    }
+  }
+
+  function handleResolveSuccess() {
+    setResolveDialogOpen(false);
+    setSelectedEvent(null);
+    fetchEvents();
+  }
+
   return (
     <div className="min-h-screen bg-[#202b39] text-white">
       <Navigation />
@@ -475,9 +544,24 @@ export default function AdminMarketsPage() {
         <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">事件列表</h2>
-            <Button variant="outline" onClick={fetchEvents}>
-              刷新
-            </Button>
+            <div className="flex items-center gap-4">
+              <select
+                className="bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white text-sm"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All</option>
+                <option value="draft">Draft</option>
+                <option value="pending">Pending</option>
+                <option value="active">Active</option>
+                <option value="closed">Closed</option>
+                <option value="resolved">Resolved</option>
+                <option value="canceled">Canceled</option>
+              </select>
+              <Button variant="outline" onClick={fetchEvents}>
+                刷新
+              </Button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -492,7 +576,7 @@ export default function AdminMarketsPage() {
                 </tr>
               </thead>
               <tbody>
-                {events.map((m) => (
+                {pagedEvents.map((m) => (
                   <tr key={m.id} className="border-t border-[#334155]">
                     <td className="p-2">{m.title}</td>
                     <td className="p-2">
@@ -552,21 +636,74 @@ export default function AdminMarketsPage() {
                         >
                           Canceled
                         </Button>
+                        {(m.status === "active" || m.status === "closed") && (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => handleResolveClick(m.id)}
+                          >
+                            Resolve
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
                 ))}
-                {!events.length && (
+                {!pagedEvents.length && (
                   <tr>
                     <td className="p-4 text-gray-400" colSpan={6}>
-                      暂无事件
+                      {statusFilter === "all" ? "暂无事件" : `暂无 ${statusFilter} 状态的事件`}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </section>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#334155]">
+              <div className="text-sm text-gray-400">
+                共 {filteredEvents.length} 条，第 {currentPage}/{totalPages} 页
+              </div>
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      disabled={currentPage <= 1}
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    >
+                      上一页
+                    </PaginationPrevious>
+                  </PaginationItem>
+                  {pageList.map((p, idx) =>
+                    typeof p === "number" ? (
+                      <PaginationItem key={p}>
+                        <PaginationLink
+                          isActive={p === currentPage}
+                          onClick={() => setCurrentPage(p)}
+                        >
+                          {p}
+                        </PaginationLink>
+                      </PaginationItem>
+                    ) : (
+                      <PaginationItem key={`${p}-${idx}`}>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )
+                  )}
+                  <PaginationItem>
+                    <PaginationNext
+                      disabled={currentPage >= totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    >
+                      下一页
+                    </PaginationNext>
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
+          </section>
           </>
         ) : (
           <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6">
@@ -575,6 +712,17 @@ export default function AdminMarketsPage() {
             </div>
           </section>
         )}
+
+        <ResolveMarketDialog
+          open={resolveDialogOpen}
+          onClose={() => {
+            setResolveDialogOpen(false);
+            setSelectedEvent(null);
+          }}
+          event={selectedEvent}
+          user={user}
+          onSuccess={handleResolveSuccess}
+        />
       </main>
     </div>
   );

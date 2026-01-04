@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Search, Bell, Menu, Moon, Sun, X } from "lucide-react";
+import { Bell, Menu, X } from "lucide-react";
+import SearchDropdown from "@/components/SearchDropdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -82,18 +83,6 @@ export default function Navigation() {
 
   const fmt = (n) => `$${Number(n || 0).toFixed(2)}`;
 
-  const SearchInput = ({ className = "" }) => (
-    <div className={`relative ${className}`}>
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-      <input
-        type="text"
-        placeholder="Search monofuture"
-        className="w-full bg-black/20 text-white pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent border border-white/10 placeholder-white/50"
-      />
-      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">/</span>
-    </div>
-  );
-
   return (
     <nav className="sticky top-0 z-50 bg-background border-b border-white/10 shadow-md mb-6">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12">
@@ -103,7 +92,7 @@ export default function Navigation() {
             <Logo width={220} />
           </Link>
 
-          <SearchInput className="flex-1 max-w-xl hidden md:block" />
+          <SearchDropdown className="flex-1 max-w-xl hidden md:block" />
 
           <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-5">
@@ -263,7 +252,7 @@ export default function Navigation() {
 
         {mobileMenuOpen && (
           <div className="md:hidden pb-4 space-y-4 border-t border-white/10 pt-4 bg-background">
-            <SearchInput />
+            <SearchDropdown />
 
             <div className="flex flex-col gap-3">
               {!isAuthed ? (

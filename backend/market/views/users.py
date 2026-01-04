@@ -131,6 +131,7 @@ def portfolio(request):
         items.append(
             {
                 "market_id": str(pos.market_id),
+                "event_id": str(pos.market.event_id) if pos.market and pos.market.event_id else None,
                 "market_title": pos.market.title,
                 "event_title": pos.market.event.title if pos.market and pos.market.event else None,
                 "option_id": pos.option_id,

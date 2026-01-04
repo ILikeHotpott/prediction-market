@@ -44,6 +44,9 @@ class Market(models.Model):
     resolved_option_index = models.SmallIntegerField(null=True, blank=True)
     resolve_type = models.TextField(default="admin")
     market_kind = models.TextField(default="binary")
+    # Settlement fields
+    settled_at = models.DateTimeField(null=True, blank=True)
+    settlement_tx_id = models.TextField(null=True, blank=True)
     assertion_text = models.TextField(null=True, blank=True)
     bucket_label = models.TextField(null=True, blank=True)
     legacy_parent_market = models.ForeignKey(

@@ -252,8 +252,8 @@ export default function PortfolioPage() {
       openAuthModal("login")
       return
     }
-    const shares = Number(pos.shares || 0)
-    if (!shares || shares <= 0) {
+    const shares = pos.shares
+    if (!shares || Number(shares) <= 0) {
       setError("可卖出份额不足")
       return
     }
@@ -269,7 +269,7 @@ export default function PortfolioPage() {
         },
         body: JSON.stringify({
           option_id: pos.option_id,
-          shares: String(shares),
+          shares: shares,  // Send original string to preserve precision
           token: "USDC",
         }),
       })
@@ -457,7 +457,7 @@ export default function PortfolioPage() {
                             <tr key={idx} className="border-b border-[#e6ddcb] last:border-0">
                               <td className="px-4 py-3 text-slate-900">
                                 <Link
-                                  href={`/market/${p.market_id}`}
+                                  href={`/market/${p.event_id || p.market_id}`}
                                   className="font-semibold text-slate-900 hover:text-red-600"
                                   title={p.event_title || p.market_title}
                                 >

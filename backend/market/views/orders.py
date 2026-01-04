@@ -232,6 +232,7 @@ def _handle_sell(*, user, market_id, payload: dict) -> JsonResponse:
             option_index=parsed["option_index"],
             shares=parsed["shares"],
             desired_amount_out=parsed["amount_out"],
+            sell_all=parsed["sell_all"],
             token=parsed["token"],
             wallet_id=parsed["wallet_id"],
             client_nonce=parsed["client_nonce"],

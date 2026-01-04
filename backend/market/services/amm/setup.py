@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import Enum
@@ -16,6 +17,38 @@ DEFAULT_AMM_MODEL = "lmsr"
 DEFAULT_AMM_B = Decimal("10000")
 DEFAULT_AMM_FEE_BPS = 0
 DEFAULT_COLLATERAL_TOKEN = "USDC"
+
+# Precision for liquidity parameter b
+B_PRECISION = Decimal("0.000000000000000001")
+
+
+def compute_b_from_funding(funding_amount: Decimal, num_outcomes: int) -> Decimal:
+    """
+    Compute LMSR liquidity parameter b from initial funding amount F.
+
+    Formula: b = F / ln(N)
+
+    For binary markets (N=2): b = F / ln(2) ≈ F / 0.693
+    For N outcomes: b = F / ln(N)
+
+    Args:
+        funding_amount: Initial funding/subsidy cap F (must be positive)
+        num_outcomes: Number of market outcomes N (must be >= 2)
+
+    Returns:
+        Liquidity parameter b, quantized to 18 decimal places.
+
+    Raises:
+        AmmSetupError: If funding_amount <= 0 or num_outcomes < 2
+    """
+    if funding_amount <= 0:
+        raise AmmSetupError("funding_amount must be positive")
+    if num_outcomes < 2:
+        raise AmmSetupError("num_outcomes must be at least 2")
+
+    ln_n = Decimal(str(math.log(num_outcomes)))
+    b = funding_amount / ln_n
+    return b.quantize(B_PRECISION)
 
 
 class AmmSetupError(ValueError):
@@ -57,7 +90,10 @@ def _to_decimal(value: Any, *, field: str) -> Decimal:
 
 
 def normalize_amm_params(
-    raw: Optional[Dict[str, Any]] = None, *, defaults: Optional[Dict[str, Any]] = None
+    raw: Optional[Dict[str, Any]] = None,
+    *,
+    defaults: Optional[Dict[str, Any]] = None,
+    num_outcomes: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Merge/validate AMM config coming from API payload.
@@ -68,6 +104,9 @@ def normalize_amm_params(
       - b > 0
       - fee_bps in [0, 10000]
       - collateral_token non-empty
+
+    New: if initial_funding_amount is provided and num_outcomes is given,
+    auto-compute b = F / ln(N) and store collateral_amount = F.
     """
     merged: Dict[str, Any] = {}
     merged.update(defaults or {})
@@ -79,11 +118,35 @@ def normalize_amm_params(
     if model not in {m.value for m in AmmModel}:
         raise AmmSetupError(f"amm.model must be one of {[m.value for m in AmmModel]}")
 
-    # Liquidity parameter b
-    b_raw = merged.get("b")
-    b = DEFAULT_AMM_B if b_raw is None else _to_decimal(b_raw, field="amm.b")
-    if b <= 0:
-        raise AmmSetupError("amm.b must be positive")
+    # Initial funding amount (new) - auto-compute b if provided
+    initial_funding_raw = (
+        merged.get("initial_funding_amount")
+        or merged.get("initialFundingAmount")
+        or merged.get("funding_amount")
+    )
+    collateral_amount = Decimal("0")
+
+    if initial_funding_raw is not None:
+        initial_funding = _to_decimal(initial_funding_raw, field="amm.initial_funding_amount")
+        if initial_funding <= 0:
+            raise AmmSetupError("amm.initial_funding_amount must be positive")
+        collateral_amount = initial_funding
+
+        # Auto-compute b from funding if num_outcomes is provided
+        if num_outcomes is not None:
+            b = compute_b_from_funding(initial_funding, num_outcomes)
+        else:
+            # Fallback: if no num_outcomes, require explicit b or use default
+            b_raw = merged.get("b")
+            b = DEFAULT_AMM_B if b_raw is None else _to_decimal(b_raw, field="amm.b")
+            if b <= 0:
+                raise AmmSetupError("amm.b must be positive")
+    else:
+        # Liquidity parameter b (legacy path)
+        b_raw = merged.get("b")
+        b = DEFAULT_AMM_B if b_raw is None else _to_decimal(b_raw, field="amm.b")
+        if b <= 0:
+            raise AmmSetupError("amm.b must be positive")
 
     # Fee (basis points) supports legacy feeBps
     fee_raw = merged.get("fee_bps") if "fee_bps" in merged else merged.get("feeBps")
@@ -113,6 +176,7 @@ def normalize_amm_params(
         "b": b,
         "fee_bps": fee_bps_int,
         "collateral_token": collateral_token,
+        "collateral_amount": collateral_amount,
     }
 
 
@@ -201,11 +265,13 @@ def ensure_pool_initialized(
     Note on transaction scope:
       - We keep a single atomic block because trading code typically assumes pool+states
         appear together (avoid "pool exists but states missing" window).
+
+    New behavior:
+      - If initial_funding_amount is provided in amm_params, auto-compute b = F / ln(N)
+        and store collateral_amount = F in the pool.
     """
     if (market is None) == (event is None):
         raise AmmSetupError("Provide exactly one of market= or event=")
-
-    params = normalize_amm_params(amm_params or {})
 
     # Precompute option_ids with simple read queries (still inside transaction if caller already has one)
     if event is not None:
@@ -215,6 +281,12 @@ def ensure_pool_initialized(
         option_ids = _select_exclusive_event_option_ids(event)
     else:
         option_ids = _get_active_market_option_ids(market)
+
+    # Determine num_outcomes for b computation
+    num_outcomes = len(option_ids) if option_ids else 2
+
+    # Normalize params with num_outcomes for auto-computing b from initial_funding_amount
+    params = normalize_amm_params(amm_params or {}, num_outcomes=num_outcomes)
 
     # Create or fetch pool
     if event is not None:
@@ -227,6 +299,7 @@ def ensure_pool_initialized(
                     b=params["b"],
                     fee_bps=params["fee_bps"],
                     collateral_token=params["collateral_token"],
+                    collateral_amount=params["collateral_amount"],
                     created_by_id=created_by_id or event.created_by_id,
                 )
             except IntegrityError:
@@ -241,6 +314,7 @@ def ensure_pool_initialized(
                     b=params["b"],
                     fee_bps=params["fee_bps"],
                     collateral_token=params["collateral_token"],
+                    collateral_amount=params["collateral_amount"],
                     created_by_id=created_by_id or market.created_by_id,
                 )
             except IntegrityError:

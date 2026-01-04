@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from decimal import Decimal, ROUND_DOWN, ROUND_UP
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .errors import QuoteInputError, QuoteMathError
 from .lmsr import buy_amount_to_delta_q, cost, prices
@@ -12,10 +12,54 @@ from .money import (
     _fee_rate_from_bps,
     _finite_pos_float,
     _quantize_money,
+    _quantize_shares,
     _to_decimal,
 )
 from .quote_math import _max_gross_payout, _solve_sell_shares_for_gross_payout
 from .state import PoolState, _resolve_target_idx
+
+
+def _compute_no_buy_deltas(
+    state: PoolState,
+    target_idx: int,
+    net_float: float,
+) -> Tuple[List[float], float]:
+    """
+    For buying "No" on option target_idx in an exclusive event:
+    Distribute the buy across all OTHER options proportionally to their probabilities.
+    
+    Returns (deltas, total_shares) where:
+      - deltas[j] is the q increase for option j (0 for target_idx)
+      - total_shares is the sum of shares bought (used for No share calculation)
+    """
+    n = len(state.q)
+    if n < 2:
+        raise QuoteMathError("Cannot buy No in a single-option pool")
+    
+    # Get current probabilities
+    probs = prices(state.q, state.b)
+    
+    # Calculate the sum of probabilities for all options except target
+    other_prob_sum = sum(probs[j] for j in range(n) if j != target_idx)
+    if other_prob_sum <= 0:
+        raise QuoteMathError("No other options available to distribute buy")
+    
+    # Distribute the amount proportionally to probabilities of other options
+    # Each other option j gets: amount * (p_j / sum_of_other_probs)
+    deltas = [0.0] * n
+    total_shares = 0.0
+    
+    for j in range(n):
+        if j == target_idx:
+            continue
+        # Proportion of the amount going to option j
+        amount_j = net_float * (probs[j] / other_prob_sum)
+        if amount_j > 0:
+            delta_j = float(buy_amount_to_delta_q(state.q, state.b, j, amount_j))
+            deltas[j] = delta_j
+            total_shares += delta_j
+    
+    return deltas, total_shares
 
 
 def quote_from_state(
@@ -27,6 +71,7 @@ def quote_from_state(
     amount_in: Optional[Number] = None,
     shares: Optional[Number] = None,
     money_quant: Decimal = Decimal("0.01"),
+    is_no_side: bool = False,  # True if this is a No option in an exclusive event
 ) -> Dict:
     """
     Pure function quote:
@@ -45,6 +90,9 @@ def quote_from_state(
       SELL:
         - shares provided: compute gross proceeds, fee taken -> amount_out (net)
         - amount_in provided: interpret as desired NET amount_out, gross-up -> solve shares_in
+        
+      For exclusive events with is_no_side=True:
+        - BUY NO: distribute buy across all OTHER options, user gets No shares
     """
     side = (side or "").lower()
     if side not in {"buy", "sell"}:
@@ -80,6 +128,39 @@ def quote_from_state(
 
             net_float = _finite_pos_float(net_dec, "amount_net")
 
+            if is_no_side and state.is_exclusive:
+                # BUY NO: distribute buy across all OTHER options
+                deltas, total_shares = _compute_no_buy_deltas(state, target_idx, net_float)
+                if total_shares <= 0:
+                    raise QuoteMathError("Amount too low to produce any shares (after fees / rounding)")
+
+                q_post = list(state.q)
+                for j, d in enumerate(deltas):
+                    q_post[j] += d
+                post_prob_bps = post_prob_bps_for(q_post)
+
+                # avg price for No shares: total amount / total shares
+                shares_out_dec = _quantize_shares(total_shares)
+                avg_price_bps = int(round(float(gross_in_dec) / float(shares_out_dec) * 10000.0))
+
+                return {
+                    "market_id": state.market_id,
+                    "pool_id": state.pool_id,
+                    "option_id": state.option_ids[target_idx],  # The Yes option corresponding to this No
+                    "side": "buy",
+                    "is_no_side": True,
+                    "amount_in": str(_quantize_money(gross_in_dec, money_quant, ROUND_UP)),
+                    "shares_out": str(shares_out_dec),
+                    "fee_amount": str(fee_dec),
+                    "avg_price_bps": avg_price_bps,
+                    "pre_prob_bps": pre_prob_bps,
+                    "post_prob_bps": post_prob_bps,
+                    "option_ids": state.option_ids,
+                    "option_indexes": state.option_indexes,
+                    "no_buy_deltas": deltas,  # For execution to know how to update each q
+                }
+
+            # Standard BUY YES
             delta = float(buy_amount_to_delta_q(state.q, state.b, target_idx, net_float))
             if not (math.isfinite(delta) and delta > 0.0):
                 raise QuoteMathError("Amount too low to produce any shares (after fees / rounding)")
@@ -89,7 +170,8 @@ def quote_from_state(
             post_prob_bps = post_prob_bps_for(q_post)
 
             # avg price uses gross user paid (rounded) / shares
-            avg_price_bps = int(round(float(gross_in_dec) / delta * 10000.0))
+            shares_out_dec = _quantize_shares(delta)
+            avg_price_bps = int(round(float(gross_in_dec) / float(shares_out_dec) * 10000.0))
 
             return {
                 "market_id": state.market_id,
@@ -97,7 +179,7 @@ def quote_from_state(
                 "option_id": state.option_ids[target_idx],
                 "side": "buy",
                 "amount_in": str(_quantize_money(gross_in_dec, money_quant, ROUND_UP)),
-                "shares_out": str(Decimal(str(delta))),
+                "shares_out": str(shares_out_dec),
                 "fee_amount": str(fee_dec),
                 "avg_price_bps": avg_price_bps,
                 "pre_prob_bps": pre_prob_bps,
@@ -151,6 +233,58 @@ def quote_from_state(
             raise QuoteInputError("shares must be > 0")
         shares_float = _finite_pos_float(shares_dec, "shares")
 
+        if is_no_side and state.is_exclusive:
+            # SELL NO: reduce q for all OTHER options (reverse of buy No)
+            n = len(state.q)
+            probs = prices(state.q, state.b)
+            other_prob_sum = sum(probs[j] for j in range(n) if j != target_idx)
+            if other_prob_sum <= 0:
+                raise QuoteMathError("No other options available for No sell")
+
+            # Distribute the shares reduction proportionally
+            deltas = [0.0] * n
+            for j in range(n):
+                if j == target_idx:
+                    continue
+                share_j = shares_float * (probs[j] / other_prob_sum)
+                deltas[j] = -share_j  # negative because we're reducing
+
+            q_post = list(state.q)
+            for j, d in enumerate(deltas):
+                q_post[j] += d
+
+            gross_float = float(cost(state.q, state.b) - cost(q_post, state.b))
+            if not (math.isfinite(gross_float) and gross_float > 0.0):
+                raise QuoteMathError("invalid gross proceeds for sell No(shares)")
+
+            gross_dec = _quantize_money(Decimal(str(gross_float)), money_quant, ROUND_DOWN)
+            fee_dec = _quantize_money(gross_dec * fee_rate, money_quant, ROUND_UP)
+            net_out_dec = _quantize_money(gross_dec - fee_dec, money_quant, ROUND_DOWN)
+
+            if net_out_dec <= 0:
+                raise QuoteMathError("Proceeds too low after fees / rounding")
+
+            post_prob_bps = post_prob_bps_for(q_post)
+            avg_price_bps = int(round(float(net_out_dec) / shares_float * 10000.0))
+
+            return {
+                "market_id": state.market_id,
+                "pool_id": state.pool_id,
+                "option_id": state.option_ids[target_idx],
+                "side": "sell",
+                "is_no_side": True,
+                "amount_out": str(net_out_dec),
+                "shares_in": str(shares_dec),
+                "fee_amount": str(fee_dec),
+                "avg_price_bps": avg_price_bps,
+                "pre_prob_bps": pre_prob_bps,
+                "post_prob_bps": post_prob_bps,
+                "option_ids": state.option_ids,
+                "option_indexes": state.option_indexes,
+                "no_sell_deltas": deltas,
+            }
+
+        # Standard SELL YES
         q_post = list(state.q)
         q_post[target_idx] -= shares_float
 
@@ -206,8 +340,9 @@ def quote_from_state(
     if not (math.isfinite(shares_needed) and shares_needed > 0.0):
         raise QuoteMathError("invalid shares_in solved for sell(amount_out)")
 
+    shares_needed_dec = _quantize_shares(shares_needed)
     q_post = list(state.q)
-    q_post[target_idx] -= shares_needed
+    q_post[target_idx] -= float(shares_needed_dec)
 
     gross_float = float(cost(state.q, state.b) - cost(q_post, state.b))
     gross_dec = _quantize_money(Decimal(str(gross_float)), money_quant, ROUND_DOWN)
@@ -215,7 +350,7 @@ def quote_from_state(
     net_out_dec = _quantize_money(gross_dec - fee_dec, money_quant, ROUND_DOWN)
 
     post_prob_bps = post_prob_bps_for(q_post)
-    avg_price_bps = int(round(float(net_out_dec) / shares_needed * 10000.0))
+    avg_price_bps = int(round(float(net_out_dec) / float(shares_needed_dec) * 10000.0))
 
     return {
         "market_id": state.market_id,
@@ -223,7 +358,7 @@ def quote_from_state(
         "option_id": state.option_ids[target_idx],
         "side": "sell",
         "amount_out": str(net_out_dec),
-        "shares_in": str(Decimal(str(shares_needed))),
+        "shares_in": str(shares_needed_dec),
         "fee_amount": str(fee_dec),
         "avg_price_bps": avg_price_bps,
         "pre_prob_bps": pre_prob_bps,
