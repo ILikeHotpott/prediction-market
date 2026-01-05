@@ -2,35 +2,45 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, Menu, X } from "lucide-react";
+import { Bell, Menu, X, User, Trophy, Bookmark, LogOut } from "lucide-react";
 import SearchDropdown from "@/components/SearchDropdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/components/auth/AuthProvider";
 import Logo from "@/components/Logo";
+import DepositModal from "@/components/DepositModal";
+import { NAV_CATEGORIES, getCategoryEmoji } from "@/lib/constants/categories";
 
 const backendBase =
   typeof window !== "undefined"
     ? process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
     : "";
 
+// Prefetch cache for categories
+const prefetchedCategories = new Set();
+
+function prefetchCategory(categoryValue) {
+  if (prefetchedCategories.has(categoryValue)) return;
+  prefetchedCategories.add(categoryValue);
+  const url = new URL(`${backendBase}/api/events/`);
+  if (categoryValue) url.searchParams.set("category", categoryValue);
+  fetch(url.toString(), { cache: "no-store" }).catch(() => {});
+}
+
 export default function Navigation() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [depositModalOpen, setDepositModalOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const { user, session, openAuthModal, signOut } = useAuth();
   const [navPortfolio, setNavPortfolio] = useState(0);
   const [navCash, setNavCash] = useState(0);
   const [navLoading, setNavLoading] = useState(false);
   const router = useRouter();
-
-  const categories = [
-    "Trending", "Breaking", "New", "Politics", "Sports", "Finance", 
-    "Crypto", "Geopolitics", "Earnings", "Tech", "Culture", "World", 
-    "Economy", "Elections", "Mentions", "More"
-  ];
+  const searchParams = useSearchParams();
+  const currentCategory = searchParams.get("category");
 
   const displayName = useMemo(() => {
     if (!user) return "User";
@@ -86,15 +96,17 @@ export default function Navigation() {
   return (
     <nav className="sticky top-0 z-50 bg-background border-b border-white/10 shadow-md mb-6">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12">
-        <div className="flex items-center justify-between h-20 gap-3">
+        <div className="flex items-center justify-center md:justify-between h-20 gap-3 relative">
           {/* Retro Casino Logo */}
           <Link href="/" className="flex items-center gap-2 group shrink-0">
-            <Logo width={220} />
+            <div className="w-[180px] sm:w-[240px] md:w-[280px]">
+              <Logo />
+            </div>
           </Link>
 
           <SearchDropdown className="flex-1 max-w-xl hidden md:block" />
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 absolute right-0 md:relative">
             <div className="hidden md:flex items-center gap-5">
               {!isAuthed ? (
                 <>
@@ -138,7 +150,7 @@ export default function Navigation() {
                   <Button
                     style={{ backgroundColor: '#E15646', color: 'white' }}
                     className="h-10 px-6 font-bold border-2 border-white/20 shadow-[0_4px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-y-[4px] transition-all rounded-lg uppercase hover:opacity-90"
-                    onClick={() => router.push("/portfolio")}
+                    onClick={() => setDepositModalOpen(true)}
                   >
                     Deposit
                   </Button>
@@ -164,54 +176,16 @@ export default function Navigation() {
                     </div>
 
                     {showUserMenu && (
-                      <div className="absolute right-0 top-full pt-2">
-                        <div className="w-64 bg-[#1e293b] dark:bg-[#0f172a] rounded-lg shadow-xl border border-white/10 py-2 z-50">
-                          <div className="px-4 py-3 border-b border-white/10">
-                            <div className="font-semibold text-white font-display">
-                              {displayName}
-                            </div>
-                            {walletLabel && (
-                              <div className="text-sm text-gray-400 truncate">
-                                {walletLabel}
-                              </div>
-                            )}
-                          </div>
-
-                          <MenuItem icon="🏆" label="Leaderboard" />
-                          <MenuItem icon="💰" label="Rewards" />
-                          <MenuItem icon="🔌" label="APIs" />
-
-                          <div className="px-4 py-2 flex items-center justify-between hover:bg-white/10 cursor-pointer transition-colors">
-                            <div className="flex items-center gap-2">
-                              <span>{theme === "dark" ? "🌙" : "☀️"}</span>
-                              <span className="text-white">Dark mode</span>
-                            </div>
-                            <button
-                              onClick={() =>
-                                setTheme(theme === "dark" ? "light" : "dark")
-                              }
-                              className={`w-12 h-6 rounded-full transition-colors ${
-                                theme === "dark" ? "bg-accent" : "bg-gray-600"
-                              } relative`}
-                            >
-                              <div
-                                className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform ${
-                                  theme === "dark"
-                                    ? "translate-x-6"
-                                    : "translate-x-0.5"
-                                }`}
-                              />
-                            </button>
-                          </div>
-
-                          <div className="border-t border-white/10 mt-2 pt-2">
-                            <MenuItem label="Accuracy" />
-                            <MenuItem label="Watchlist" />
-                            <MenuItem label="Documentation" />
-                            <MenuItem label="Terms of Use" />
+                      <div className="absolute right-0 top-full pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="w-56 rounded-xl shadow-xl border border-[#e6ddcb] py-2 z-50" style={{ background: '#f9f6ee' }}>
+                          <MenuItem icon={<User className="w-4 h-4" />} label="Profile" />
+                          <MenuItem icon={<Trophy className="w-4 h-4" />} label="Leaderboard" />
+                          <MenuItem icon={<Bookmark className="w-4 h-4" />} label="Watchlist" href="/watchlist" />
+                          <div className="border-t border-[#e6ddcb] mt-2 pt-2">
                             <MenuItem
+                              icon={<LogOut className="w-4 h-4" />}
                               label="Logout"
-                              className="text-red-400"
+                              className="text-red-500"
                               onClick={signOut}
                             />
                           </div>
@@ -234,20 +208,24 @@ export default function Navigation() {
         </div>
 
         <div className="hidden md:flex gap-6 overflow-x-auto scrollbar-hide pt-4 pb-0 border-b border-white/10">
-          {categories.map((category, idx) => (
-            <Link
-              key={idx}
-              href={`/${category.toLowerCase()}`}
-              className={`text-sm whitespace-nowrap pb-3 transition-colors font-medium tracking-wide uppercase ${
-                idx === 0
-                  ? "text-accent border-b-2 border-accent"
-                  : "text-[#F4F6FA] hover:text-white"
-              }`}
-            >
-              {idx === 0 && <span className="mr-1">🔥</span>}
-              {category}
-            </Link>
-          ))}
+          {NAV_CATEGORIES.map((category) => {
+            const isActive = currentCategory === category.value;
+            return (
+              <Link
+                key={category.value}
+                href={`/?category=${category.value}`}
+                onMouseEnter={() => prefetchCategory(category.value)}
+                className={`text-sm whitespace-nowrap pb-3 transition-colors font-medium tracking-wide uppercase ${
+                  isActive
+                    ? "text-accent border-b-2 border-accent"
+                    : "text-[#F4F6FA] hover:text-white"
+                }`}
+              >
+                {category.emoji && <span className="mr-1">{category.emoji}</span>}
+                {category.label}
+              </Link>
+            );
+          })}
         </div>
 
         {mobileMenuOpen && (
@@ -314,7 +292,7 @@ export default function Navigation() {
                     <Button
                       style={{ backgroundColor: '#E15646', color: 'white' }}
                       className="flex-shrink-0 font-bold h-12 px-4 uppercase hover:opacity-90"
-                      onClick={() => router.push("/portfolio")}
+                      onClick={() => setDepositModalOpen(true)}
                     >
                       Deposit
                     </Button>
@@ -325,33 +303,76 @@ export default function Navigation() {
             </div>
 
             <div className="flex gap-3 overflow-x-auto scrollbar-hide pt-1 pb-1">
-              {categories.map((category, idx) => (
-                <Link
-                  key={idx}
-                  href={`/${category.toLowerCase()}`}
-                  className="text-muted-foreground hover:text-white whitespace-nowrap px-3 py-2 rounded-full bg-white/5 border border-white/10 uppercase font-medium text-xs"
-                >
-                  {category}
-                </Link>
-              ))}
+              {NAV_CATEGORIES.map((category) => {
+                const isActive = currentCategory === category.value;
+                return (
+                  <Link
+                    key={category.value}
+                    href={`/?category=${category.value}`}
+                    onMouseEnter={() => prefetchCategory(category.value)}
+                    className={`whitespace-nowrap px-3 py-2 rounded-full border uppercase font-medium text-xs ${
+                      isActive
+                        ? "text-accent bg-accent/10 border-accent"
+                        : "text-muted-foreground hover:text-white bg-white/5 border-white/10"
+                    }`}
+                  >
+                    {category.label}
+                  </Link>
+                );
+              })}
             </div>
           </div>
         )}
       </div>
+
+      <DepositModal
+        open={depositModalOpen}
+        onClose={() => setDepositModalOpen(false)}
+        user={user}
+        onSuccess={() => {
+          // Refresh portfolio data
+          if (backendBase && user) {
+            fetch(`${backendBase}/api/users/me/portfolio/`, {
+              headers: { "X-User-Id": user.id },
+              cache: "no-store",
+            })
+              .then((res) => res.json())
+              .then((data) => {
+                const cash = Number(data?.balance?.available_amount || 0);
+                const portfolioValue = Number(data?.portfolio_value || 0);
+                setNavCash(cash);
+                setNavPortfolio(cash + portfolioValue);
+              })
+              .catch(() => {});
+          }
+        }}
+      />
     </nav>
   );
 }
 
-function MenuItem({ icon, label, className = "", onClick }) {
+function MenuItem({ icon, label, className = "", onClick, href }) {
+  const content = (
+    <div className="flex items-center gap-3 text-gray-700">
+      {icon}
+      <span className="font-medium">{label}</span>
+    </div>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={`block px-4 py-2.5 hover:bg-black/5 cursor-pointer transition-colors ${className}`}>
+        {content}
+      </Link>
+    );
+  }
+
   return (
     <div
-      className={`px-4 py-2 hover:bg-white/10 cursor-pointer transition-colors ${className}`}
+      className={`px-4 py-2.5 hover:bg-black/5 cursor-pointer transition-colors ${className}`}
       onClick={onClick}
     >
-      <div className="flex items-center gap-2">
-        {icon && <span>{icon}</span>}
-        <span className="text-white font-sans">{label}</span>
-      </div>
+      {content}
     </div>
   );
 }

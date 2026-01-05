@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ResolveMarketDialog from "@/components/admin/ResolveMarketDialog";
+import RedemptionCodeGenerator from "@/components/admin/RedemptionCodeGenerator";
 import {
   Pagination,
   PaginationContent,
@@ -14,6 +15,7 @@ import {
   PaginationNext,
   PaginationEllipsis,
 } from "@/components/ui/pagination";
+import { ADMIN_CATEGORIES } from "@/lib/constants/categories";
 
 const backendBase =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -28,6 +30,8 @@ export default function AdminMarketsPage() {
   const [userRole, setUserRole] = useState(null);
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
   const defaultStandaloneMarkets = [{ title: "Primary", sort_weight: 0 }];
   const defaultMultiMarkets = [
     { title: "Yes", sort_weight: 0 },
@@ -189,6 +193,31 @@ export default function AdminMarketsPage() {
       next.splice(idx, 1);
       return { ...prev, markets: next };
     });
+  }
+
+  async function handleImageUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${backendBase}/api/upload/image/`, {
+        method: "POST",
+        headers: user ? { "X-User-Id": user.id } : {},
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "上传失败");
+      handleChange("cover_url", data.url);
+    } catch (err) {
+      setError(err.message || "上传失败");
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleCreate(e) {
@@ -377,21 +406,57 @@ export default function AdminMarketsPage() {
             </div>
             <div>
               <label className="text-sm text-gray-300">类别</label>
-              <input
+              <select
                 className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
                 value={form.category}
                 onChange={(e) => handleChange("category", e.target.value)}
-                placeholder="如: sports"
-              />
+              >
+                <option value="">请选择类别</option>
+                {ADMIN_CATEGORIES.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
-              <label className="text-sm text-gray-300">封面 URL</label>
-              <input
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
-                value={form.cover_url}
-                onChange={(e) => handleChange("cover_url", e.target.value)}
-                placeholder="https://example.com/cover.jpg 或 emoji"
-              />
+              <label className="text-sm text-gray-300">封面图片</label>
+              <div className="mt-1 flex items-center gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? "上传中..." : "选择图片"}
+                </Button>
+                {form.cover_url && (
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={form.cover_url}
+                      alt="封面预览"
+                      className="h-10 w-10 object-cover rounded"
+                    />
+                    <span className="text-xs text-gray-400 truncate max-w-[150px]">
+                      {form.cover_url.split("/").pop()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleChange("cover_url", "")}
+                      className="text-red-400 text-xs hover:text-red-300"
+                    >
+                      删除
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label className="text-sm text-gray-300">Slug</label>
@@ -703,7 +768,12 @@ export default function AdminMarketsPage() {
               </Pagination>
             </div>
           )}
-          </section>
+        </section>
+
+        {/* Redemption Code Generator Section */}
+        <section className="mt-8">
+          <RedemptionCodeGenerator user={user} />
+        </section>
           </>
         ) : (
           <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6">

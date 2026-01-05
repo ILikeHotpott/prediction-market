@@ -32,6 +32,12 @@ export default function ResolveMarketDialog({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // Pool info state
+  const [poolInfo, setPoolInfo] = useState(null);
+  const [poolLoading, setPoolLoading] = useState(false);
+  const [addCollateralAmount, setAddCollateralAmount] = useState("");
+  const [addingCollateral, setAddingCollateral] = useState(false);
+
   // For standalone: which option wins (option_id)
   // For exclusive: which market wins (market_id), then we pick that market's YES option
   // For independent: map of market_id -> option_id
@@ -44,8 +50,68 @@ export default function ResolveMarketDialog({
       setSuccess("");
       setSelections({});
       setLoading(false);
+      setPoolInfo(null);
+      setAddCollateralAmount("");
+      // Fetch pool info
+      if (event?.id) {
+        fetchPoolInfo(event.id);
+      }
     }
-  }, [open]);
+  }, [open, event?.id]);
+
+  // Fetch pool info
+  const fetchPoolInfo = async (eventId) => {
+    setPoolLoading(true);
+    try {
+      const res = await fetch(`${backendBase}/api/admin/events/${eventId}/pool/`, {
+        headers: user ? { "X-User-Id": user.id } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPoolInfo(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch pool info:", err);
+    } finally {
+      setPoolLoading(false);
+    }
+  };
+
+  // Add collateral to pool
+  const handleAddCollateral = async () => {
+    if (!addCollateralAmount || !event?.id) return;
+    setAddingCollateral(true);
+    setError("");
+    try {
+      const res = await fetch(
+        `${backendBase}/api/admin/events/${event.id}/pool/add-collateral/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(user ? { "X-User-Id": user.id } : {}),
+          },
+          body: JSON.stringify({ amount: addCollateralAmount }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to add collateral");
+      }
+      setPoolInfo((prev) => ({
+        ...prev,
+        collateral_amount: data.new_collateral_amount,
+        pool_cash: data.pool_cash,
+      }));
+      setAddCollateralAmount("");
+      setSuccess(`Successfully added ${addCollateralAmount} collateral`);
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAddingCollateral(false);
+    }
+  };
 
   if (!event) return null;
 
@@ -354,7 +420,7 @@ export default function ResolveMarketDialog({
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogContent className="mx-4">
+      <DialogContent className="mx-4 max-w-lg">
         <DialogHeader>
           <DialogTitle>Resolve & Settle: {event.title}</DialogTitle>
           <DialogDescription>{getDescription()}</DialogDescription>
@@ -365,7 +431,61 @@ export default function ResolveMarketDialog({
           </div>
         </DialogHeader>
 
-        <div className="max-h-[400px] overflow-y-auto">{renderContent()}</div>
+        {/* Pool Info Section */}
+        <div className="bg-[#0f172a] border border-[#334155] rounded-lg p-4 mb-4">
+          <h4 className="text-white font-medium mb-3 flex items-center gap-2">
+            💰 Pool Funds
+            {poolLoading && <span className="text-xs text-gray-400">(loading...)</span>}
+          </h4>
+          {poolInfo ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Pool Cash:</span>
+                <span className="text-white font-mono">{Number(poolInfo.pool_cash).toFixed(2)} {poolInfo.collateral_token}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Collateral:</span>
+                <span className="text-white font-mono">{Number(poolInfo.collateral_amount).toFixed(2)} {poolInfo.collateral_token}</span>
+              </div>
+              <div className="flex justify-between border-t border-[#334155] pt-2 mt-2">
+                <span className="text-gray-400">Total Available:</span>
+                <span className="text-green-400 font-mono font-semibold">
+                  {(Number(poolInfo.pool_cash) + Number(poolInfo.collateral_amount)).toFixed(2)} {poolInfo.collateral_token}
+                </span>
+              </div>
+
+              {/* Add Collateral Form */}
+              <div className="mt-4 pt-3 border-t border-[#334155]">
+                <label className="text-gray-400 text-xs block mb-2">Add Collateral for Settlement:</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={addCollateralAmount}
+                    onChange={(e) => setAddCollateralAmount(e.target.value)}
+                    placeholder="Amount"
+                    className="flex-1 bg-[#1f2937] border border-[#334155] rounded px-3 py-2 text-white text-sm"
+                    min="0"
+                    step="0.01"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleAddCollateral}
+                    disabled={!addCollateralAmount || addingCollateral}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {addingCollateral ? "Adding..." : "Add"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-400 text-sm">
+              {poolLoading ? "Loading pool info..." : "Pool info not available"}
+            </div>
+          )}
+        </div>
+
+        <div className="max-h-[300px] overflow-y-auto">{renderContent()}</div>
 
         {error && (
           <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">

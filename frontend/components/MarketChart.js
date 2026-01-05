@@ -166,6 +166,7 @@ export default function MarketChart({
       layout: {
         background: { type: ColorType.Solid, color: "#f9f6ee" },
         textColor: "#64748b",
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: "#e6ddcb", style: 1 },
