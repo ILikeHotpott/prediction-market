@@ -1,11 +1,14 @@
 from django.urls import path
 
-from .views import admin, amm, comments, events, market, orders, search, series, users
+from .views import admin, amm, comments, events, market, orders, redemption, search, series, upload, users, watchlist
 
 urlpatterns = [
     # Search API
     path("api/search/", search.search, name="search"),
     path("api/search/reindex/", search.reindex_events, name="search-reindex"),
+
+    # Upload API
+    path("api/upload/image/", upload.upload_image, name="upload-image"),
 
     # Event-first APIs
     path("api/events/", events.list_events, name="event-list"),
@@ -21,6 +24,10 @@ urlpatterns = [
         events.update_event_status,
         name="event-status",
     ),
+
+    # Watchlist APIs
+    path("api/watchlist/", watchlist.list_watchlist, name="watchlist-list"),
+    path("api/watchlist/<uuid:event_id>/toggle/", watchlist.toggle_watchlist, name="watchlist-toggle"),
 
     # Legacy market endpoints (kept for backward compatibility)
     path("api/markets/", market.list_markets, name="market-list"),
@@ -83,6 +90,33 @@ urlpatterns = [
         "api/admin/markets/<uuid:market_id>/resolve-and-settle/",
         admin.admin_resolve_and_settle_market,
         name="admin-market-resolve-and-settle",
+    ),
+    # Admin pool management
+    path(
+        "api/admin/events/<uuid:event_id>/pool/",
+        admin.admin_get_pool_info,
+        name="admin-pool-info",
+    ),
+    path(
+        "api/admin/events/<uuid:event_id>/pool/add-collateral/",
+        admin.admin_add_collateral,
+        name="admin-add-collateral",
+    ),
+    # Redemption code endpoints
+    path(
+        "api/admin/redemption-codes/generate/",
+        redemption.generate_code,
+        name="admin-generate-code",
+    ),
+    path(
+        "api/admin/redemption-codes/",
+        redemption.list_codes,
+        name="admin-list-codes",
+    ),
+    path(
+        "api/users/me/redeem/",
+        redemption.redeem_code,
+        name="user-redeem-code",
     ),
 ]
 

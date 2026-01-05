@@ -12,6 +12,8 @@ from .admin import (
     admin_settle_market,
     admin_resolve_and_settle_market,
 )
+from . import redemption
+from . import watchlist
 
 __all__ = [
     "list_markets",
@@ -28,5 +30,7 @@ __all__ = [
     "admin_resolve_market",
     "admin_settle_market",
     "admin_resolve_and_settle_market",
+    "redemption",
+    "watchlist",
 ]
 

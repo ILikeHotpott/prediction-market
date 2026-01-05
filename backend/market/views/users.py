@@ -116,7 +116,8 @@ def portfolio(request):
 
     positions = (
         Position.objects.select_related("market", "market__event", "option", "option__stats")
-        .filter(user=user)
+        .filter(user=user, shares__gt=0)
+        .exclude(market__status__in=["resolved", "canceled"])
         .order_by("-updated_at")
     )
 

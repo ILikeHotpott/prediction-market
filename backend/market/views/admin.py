@@ -6,13 +6,16 @@ These endpoints are intended for admin users only.
 
 import json
 import logging
+from decimal import Decimal
 from typing import Optional
 
+from django.db import transaction
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from ..models import User
+from ..models import AmmPool, Event, Market, User
 from ..services.amm.settlement import (
     SettlementError,
     resolve_and_settle_market,
@@ -203,4 +206,119 @@ def admin_resolve_and_settle_market(request, market_id: str) -> JsonResponse:
         return _json_error(str(e), e.code, status=e.http_status)
     except Exception as e:
         logger.exception("Error resolve-and-settle market %s: %s", market_id, e)
+        return _json_error("Internal server error", "INTERNAL_ERROR", status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def admin_get_pool_info(request, event_id: str) -> JsonResponse:
+    """
+    GET /api/admin/events/<event_id>/pool/
+
+    Get AMM pool info for an event (including pool_cash and collateral_amount).
+    """
+    admin_user = _get_admin_user(request)
+    if admin_user is None:
+        return _json_error("Admin access required", "UNAUTHORIZED", status=403)
+
+    try:
+        # Try event-level pool first
+        pool = AmmPool.objects.filter(event_id=event_id).first()
+        if not pool:
+            # Try market-level pool
+            event = Event.objects.filter(pk=event_id).first()
+            if event:
+                markets = Market.objects.filter(event_id=event_id)
+                for market in markets:
+                    pool = AmmPool.objects.filter(market_id=market.id).first()
+                    if pool:
+                        break
+
+        if not pool:
+            return _json_error("Pool not found", "POOL_NOT_FOUND", status=404)
+
+        return JsonResponse({
+            "pool_id": str(pool.id),
+            "event_id": str(pool.event_id) if pool.event_id else None,
+            "market_id": str(pool.market_id) if pool.market_id else None,
+            "pool_cash": str(pool.pool_cash),
+            "collateral_amount": str(pool.collateral_amount),
+            "funding_amount": str(pool.funding_amount),
+            "collected_fee": str(pool.collected_fee),
+            "status": pool.status,
+            "collateral_token": pool.collateral_token,
+        })
+    except Exception as e:
+        logger.exception("Error getting pool info for event %s: %s", event_id, e)
+        return _json_error("Internal server error", "INTERNAL_ERROR", status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def admin_add_collateral(request, event_id: str) -> JsonResponse:
+    """
+    POST /api/admin/events/<event_id>/pool/add-collateral/
+
+    Add collateral to an AMM pool for settlement.
+
+    Request body:
+    {
+        "amount": "1000.00"
+    }
+    """
+    admin_user = _get_admin_user(request)
+    if admin_user is None:
+        return _json_error("Admin access required", "UNAUTHORIZED", status=403)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return _json_error("Invalid JSON", "INVALID_JSON", status=400)
+
+    amount_str = data.get("amount")
+    if not amount_str:
+        return _json_error("amount is required", "MISSING_PARAM", status=400)
+
+    try:
+        amount = Decimal(str(amount_str))
+        if amount <= 0:
+            return _json_error("amount must be positive", "INVALID_PARAM", status=400)
+    except Exception:
+        return _json_error("Invalid amount format", "INVALID_PARAM", status=400)
+
+    try:
+        with transaction.atomic():
+            # Try event-level pool first
+            pool = AmmPool.objects.select_for_update().filter(event_id=event_id).first()
+            if not pool:
+                # Try market-level pool
+                event = Event.objects.filter(pk=event_id).first()
+                if event:
+                    markets = Market.objects.filter(event_id=event_id)
+                    for market in markets:
+                        pool = AmmPool.objects.select_for_update().filter(market_id=market.id).first()
+                        if pool:
+                            break
+
+            if not pool:
+                return _json_error("Pool not found", "POOL_NOT_FOUND", status=404)
+
+            # Add collateral
+            pool.collateral_amount = Decimal(pool.collateral_amount) + amount
+            pool.updated_at = timezone.now()
+            pool.save(update_fields=["collateral_amount", "updated_at"])
+
+            logger.info(
+                "Added collateral to pool %s: amount=%s, new_total=%s",
+                pool.id, amount, pool.collateral_amount
+            )
+
+            return JsonResponse({
+                "pool_id": str(pool.id),
+                "added_amount": str(amount),
+                "new_collateral_amount": str(pool.collateral_amount),
+                "pool_cash": str(pool.pool_cash),
+            })
+    except Exception as e:
+        logger.exception("Error adding collateral for event %s: %s", event_id, e)
         return _json_error("Internal server error", "INTERNAL_ERROR", status=500)

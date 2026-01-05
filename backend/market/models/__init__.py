@@ -11,8 +11,10 @@ from .ledger import (
     TxRequest,
 )
 from .markets import Market, MarketOption, MarketOptionSeries, MarketOptionStats
+from .redemption import RedemptionCode
 from .tags import EventTag, MarketTag, Tag
 from .users import User, Wallet, WalletAccount
+from .watchlist import Watchlist
 
 __all__ = [
     "AmmPool",
@@ -29,12 +31,14 @@ __all__ = [
     "MarketTag",
     "OrderIntent",
     "Position",
+    "RedemptionCode",
     "Tag",
     "Trade",
     "TxRequest",
     "User",
     "Wallet",
     "WalletAccount",
+    "Watchlist",
 ]
 
 

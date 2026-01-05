@@ -310,6 +310,7 @@ def _create_event_with_markets(event_fields, markets_data, amm_params_list, payl
 def list_events(request):
     """
     Lightweight listing for homepage cards (events with primary market snapshot).
+    Supports ?category=xxx filter.
     """
     options_qs = MarketOption.objects.prefetch_related("stats").order_by("option_index")
     is_admin = False
@@ -328,6 +329,17 @@ def list_events(request):
     )
     if not is_admin and not request.GET.get("all"):
         events_qs = events_qs.filter(status="active", is_hidden=False)
+
+    # Category filter
+    category = request.GET.get("category")
+    if category:
+        events_qs = events_qs.filter(category__iexact=category)
+
+    # IDs filter (for watchlist)
+    ids_param = request.GET.get("ids")
+    if ids_param:
+        id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
+        events_qs = events_qs.filter(id__in=id_list)
 
     items = [serialize_event(e) for e in events_qs[:100]]
     return JsonResponse({"items": items}, status=200)
