@@ -21,6 +21,7 @@ class User(models.Model):
     )
     email = models.TextField(unique=True, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
+    onboarding_completed = models.BooleanField(default=False)
 
     class Meta:
         managed = False

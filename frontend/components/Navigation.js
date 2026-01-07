@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -9,6 +9,7 @@ import SearchDropdown from "@/components/SearchDropdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { usePortfolio } from "@/components/PortfolioProvider";
 import Logo from "@/components/Logo";
 import DepositModal from "@/components/DepositModal";
 import { NAV_CATEGORIES, getCategoryEmoji } from "@/lib/constants/categories";
@@ -35,9 +36,7 @@ export default function Navigation() {
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const { user, session, openAuthModal, signOut } = useAuth();
-  const [navPortfolio, setNavPortfolio] = useState(0);
-  const [navCash, setNavCash] = useState(0);
-  const [navLoading, setNavLoading] = useState(false);
+  const { portfolio: navPortfolio, cash: navCash, loading: navLoading, avatarUrl: profileAvatarUrl, refreshPortfolio } = usePortfolio();
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentCategory = searchParams.get("category");
@@ -52,7 +51,8 @@ export default function Navigation() {
     );
   }, [user]);
 
-  const avatarUrl = user?.user_metadata?.avatar_url;
+  // Prefer profile avatar (from database) over Google avatar (from auth metadata)
+  const avatarUrl = profileAvatarUrl || user?.user_metadata?.avatar_url;
   const walletLabel =
     user?.user_metadata?.wallet_address ||
     user?.user_metadata?.sub ||
@@ -60,36 +60,6 @@ export default function Navigation() {
     "";
 
   const isAuthed = !!session;
-
-  useEffect(() => {
-    async function fetchPortfolio() {
-      if (!backendBase || !user) {
-        setNavPortfolio(0);
-        setNavCash(0);
-        setNavLoading(false);
-        return;
-      }
-      setNavLoading(true);
-      try {
-        const res = await fetch(`${backendBase}/api/users/me/portfolio/`, {
-          headers: { "X-User-Id": user.id },
-          cache: "no-store",
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "failed");
-        const cash = Number(data?.balance?.available_amount || 0);
-        const portfolioValue = Number(data?.portfolio_value || 0);
-        setNavCash(cash);
-        setNavPortfolio(cash + portfolioValue);
-      } catch (_e) {
-        setNavCash(0);
-        setNavPortfolio(0);
-      } finally {
-        setNavLoading(false);
-      }
-    }
-    fetchPortfolio();
-  }, [user]);
 
   const fmt = (n) => `$${Number(n || 0).toFixed(2)}`;
 
@@ -178,8 +148,8 @@ export default function Navigation() {
                     {showUserMenu && (
                       <div className="absolute right-0 top-full pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
                         <div className="w-56 rounded-xl shadow-xl border border-[#e6ddcb] py-2 z-50" style={{ background: '#f9f6ee' }}>
-                          <MenuItem icon={<User className="w-4 h-4" />} label="Profile" />
-                          <MenuItem icon={<Trophy className="w-4 h-4" />} label="Leaderboard" />
+                          <MenuItem icon={<User className="w-4 h-4" />} label="Profile" href="/profile" />
+                          <MenuItem icon={<Trophy className="w-4 h-4" />} label="Leaderboard" href="/leaderboard" />
                           <MenuItem icon={<Bookmark className="w-4 h-4" />} label="Watchlist" href="/watchlist" />
                           <div className="border-t border-[#e6ddcb] mt-2 pt-2">
                             <MenuItem
@@ -215,7 +185,7 @@ export default function Navigation() {
                 key={category.value}
                 href={`/?category=${category.value}`}
                 onMouseEnter={() => prefetchCategory(category.value)}
-                className={`text-sm whitespace-nowrap pb-3 transition-colors font-medium tracking-wide uppercase ${
+                className={`text-sm whitespace-nowrap pb-3 transition-colors font-medium tracking-wide capitalize ${
                   isActive
                     ? "text-accent border-b-2 border-accent"
                     : "text-[#F4F6FA] hover:text-white"
@@ -252,7 +222,7 @@ export default function Navigation() {
               ) : (
                 <>
                   <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                    <div className="w-10 h-10 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center flex-shrink-0">
+                    <Link href="/profile" className="w-10 h-10 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center flex-shrink-0">
                       {avatarUrl ? (
                         <img src={avatarUrl} alt="User" className="w-full h-full object-cover" />
                       ) : (
@@ -260,9 +230,9 @@ export default function Navigation() {
                           {displayName.charAt(0)}
                         </span>
                       )}
-                    </div>
+                    </Link>
                     <div className="flex-1 min-w-0">
-                      <div className="text-white font-semibold truncate font-display">{displayName}</div>
+                      <Link href="/profile" className="text-white font-semibold truncate font-display block hover:text-accent">{displayName}</Link>
                       {walletLabel && <div className="text-xs text-gray-400 truncate">{walletLabel}</div>}
                     </div>
                     <button className="text-red-300 text-sm font-bold uppercase" onClick={signOut}>
@@ -310,7 +280,7 @@ export default function Navigation() {
                     key={category.value}
                     href={`/?category=${category.value}`}
                     onMouseEnter={() => prefetchCategory(category.value)}
-                    className={`whitespace-nowrap px-3 py-2 rounded-full border uppercase font-medium text-xs ${
+                    className={`whitespace-nowrap px-3 py-2 rounded-full border capitalize font-medium text-xs ${
                       isActive
                         ? "text-accent bg-accent/10 border-accent"
                         : "text-muted-foreground hover:text-white bg-white/5 border-white/10"
@@ -329,23 +299,7 @@ export default function Navigation() {
         open={depositModalOpen}
         onClose={() => setDepositModalOpen(false)}
         user={user}
-        onSuccess={() => {
-          // Refresh portfolio data
-          if (backendBase && user) {
-            fetch(`${backendBase}/api/users/me/portfolio/`, {
-              headers: { "X-User-Id": user.id },
-              cache: "no-store",
-            })
-              .then((res) => res.json())
-              .then((data) => {
-                const cash = Number(data?.balance?.available_amount || 0);
-                const portfolioValue = Number(data?.portfolio_value || 0);
-                setNavCash(cash);
-                setNavPortfolio(cash + portfolioValue);
-              })
-              .catch(() => {});
-          }
-        }}
+        onSuccess={() => refreshPortfolio()}
       />
     </nav>
   );

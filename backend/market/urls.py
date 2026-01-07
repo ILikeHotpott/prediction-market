@@ -71,9 +71,14 @@ urlpatterns = [
     ),
     path("api/users/sync/", users.sync_user, name="user-sync"),
     path("api/users/me/", users.me, name="user-me"),
+    path("api/users/me/profile/", users.update_profile, name="user-profile-update"),
+    path("api/users/me/avatar/", users.upload_avatar, name="user-avatar-upload"),
     path("api/users/me/balance/", users.get_balance, name="user-balance"),
     path("api/users/me/portfolio/", users.portfolio, name="user-portfolio"),
     path("api/users/me/history/", users.order_history, name="user-history"),
+    path("api/users/me/pnl-history/", users.pnl_history, name="user-pnl-history"),
+    path("api/users/me/onboarding/complete/", users.complete_onboarding, name="user-onboarding-complete"),
+    path("api/leaderboard/", users.leaderboard, name="leaderboard"),
 
     # Admin endpoints for market resolution and settlement
     path(

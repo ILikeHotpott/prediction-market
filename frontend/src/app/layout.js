@@ -1,6 +1,7 @@
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
+import { PortfolioProvider } from "@/components/PortfolioProvider";
 
 export const metadata = {
   title: "Monofuture - Prediction Market",
@@ -17,7 +18,9 @@ export default function RootLayout({ children }) {
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <PortfolioProvider>{children}</PortfolioProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

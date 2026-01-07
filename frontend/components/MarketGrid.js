@@ -114,18 +114,25 @@ export default function MarketGrid() {
   const category = searchParams.get("category")
   const { user } = useAuth()
 
-  // Initialize with cached data immediately
-  const [markets, setMarkets] = useState(() => getCachedEvents(category) || [])
+  // Initialize with empty array to avoid hydration mismatch
+  const [markets, setMarkets] = useState([])
   const [watchedIds, setWatchedIds] = useState(new Set())
   const [spinningColumns, setSpinningColumns] = useState([false, false, false])
   const [isSpinning, setIsSpinning] = useState(false)
   const [spinKey, setSpinKey] = useState(0)
+  const [mounted, setMounted] = useState(false)
   const spinTimers = useRef([])
   const bodyOverflowRef = useRef()
   const hasFetched = useRef(false)
 
-  // Load cached data instantly on category change
+  // Set mounted flag after hydration
   useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Load cached data after mount to avoid hydration mismatch
+  useEffect(() => {
+    if (!mounted) return
     const cached = getCachedEvents(category)
     if (cached) setMarkets(cached)
     // Always refresh in background (SWR pattern)
@@ -140,7 +147,7 @@ export default function MarketGrid() {
       hasFetched.current = true
       setTimeout(prefetchAllCategories, 100)
     }
-  }, [category])
+  }, [category, mounted])
 
   useEffect(() => {
     if (user) fetchWatchlist()

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import Navigation from "@/components/Navigation"
 import { useAuth } from "@/components/auth/AuthProvider"
+import { usePortfolio } from "@/components/PortfolioProvider"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,6 +17,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -50,6 +52,7 @@ async function fetchOnce(key, factory, ttlMs = 3000) {
 
 export default function PortfolioPage() {
   const { user, openAuthModal } = useAuth()
+  const { refreshPortfolio } = usePortfolio()
   const [activeTab, setActiveTab] = useState("positions")
   const [loadingPortfolio, setLoadingPortfolio] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -62,6 +65,9 @@ export default function PortfolioPage() {
   const [historyLoaded, setHistoryLoaded] = useState(false)
   const [sellingId, setSellingId] = useState(null)
   const [actionMessage, setActionMessage] = useState("")
+  const [pnlHistory, setPnlHistory] = useState({ data: [], current_pnl: 0 })
+  const [pnlPeriod, setPnlPeriod] = useState("1m")
+  const [pnlLoading, setPnlLoading] = useState(false)
   const fetchGuardRef = useRef({ inFlight: false, last: 0 })
   const didInitRef = useRef(false)
   const historyPageSize = 10
@@ -92,6 +98,12 @@ export default function PortfolioPage() {
     }
     fetchPortfolio()
   }, [user])
+
+  useEffect(() => {
+    if (user) {
+      fetchPnlHistory(pnlPeriod)
+    }
+  }, [user, pnlPeriod])
 
   useEffect(() => {
     if (activeTab !== "history" || !user) return
@@ -193,6 +205,25 @@ export default function PortfolioPage() {
     }
   }
 
+  async function fetchPnlHistory(period) {
+    if (!user) return
+    setPnlLoading(true)
+    try {
+      const res = await fetch(`${backendBase}/api/users/me/pnl-history/?period=${period}`, {
+        headers: { "X-User-Id": user.id },
+        cache: "no-store",
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setPnlHistory(data)
+      }
+    } catch (e) {
+      console.error("Failed to fetch PnL history:", e)
+    } finally {
+      setPnlLoading(false)
+    }
+  }
+
   const balance = portfolio?.balance
   const positionsRaw = portfolio?.positions || []
   const positions = useMemo(
@@ -215,6 +246,8 @@ export default function PortfolioPage() {
   const showPortfolioSkeleton = loadingPortfolio && !hasPortfolio
   const cashValue = useMemo(() => Number(balance?.available_amount || 0), [balance])
   const holdingsValue = useMemo(() => Number(portfolio?.portfolio_value || 0), [portfolio])
+  const totalCashOut = useMemo(() => Number(portfolio?.total_cash_out_value || 0), [portfolio])
+  const totalPnl = useMemo(() => Number(portfolio?.total_pnl || 0), [portfolio])
   const totalValue = useMemo(() => cashValue + holdingsValue, [cashValue, holdingsValue])
   const historyPageCount = useMemo(() => {
     const total = Number.isFinite(historyTotal) ? historyTotal : 0
@@ -277,6 +310,7 @@ export default function PortfolioPage() {
       if (!res.ok) throw new Error(data.error || "卖出失败")
       setActionMessage("卖出成功")
       await fetchPortfolio()
+      refreshPortfolio()
     } catch (e) {
       setError(e.message || "卖出失败")
     } finally {
@@ -304,65 +338,103 @@ export default function PortfolioPage() {
             {error && <div className="text-red-400 mb-4">{error}</div>}
             {actionMessage && <div className="text-green-400 mb-4">{actionMessage}</div>}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-slate-800 text-sm">Portfolio</CardTitle>
-                </CardHeader>
-                <CardContent>
+                <CardContent className="pt-5 pb-4">
                   {showPortfolioSkeleton ? (
                     <>
-                      <Skeleton className="h-9 w-32 mb-3" />
-                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-10 w-40 mb-4" />
+                      <Skeleton className="h-4 w-32" />
                     </>
                   ) : (
                     <>
-                      <div className="text-3xl font-bold text-slate-900">${totalValue.toFixed(2)}</div>
-                      <div className="text-sm text-slate-700 mt-2">
-                        Cash: ${cashValue.toFixed(2)} | Holdings: ${holdingsValue.toFixed(2)}
+                      <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Value</div>
+                      <div className="text-4xl font-bold text-slate-900 mb-4">${totalValue.toFixed(2)}</div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="text-xs text-slate-500 uppercase tracking-wide">Cash</div>
+                          <div className="text-lg font-semibold text-slate-800">${cashValue.toFixed(2)}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-slate-500 uppercase tracking-wide">Holdings</div>
+                          <div className="text-lg font-semibold text-slate-800">${holdingsValue.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-[#e6ddcb]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-500 uppercase tracking-wide">Unrealized P&L</span>
+                          <span className={`text-lg font-semibold ${totalPnl >= 0 ? "text-green-600" : "text-red-500"}`}>
+                            {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
+                          </span>
+                        </div>
                       </div>
                     </>
                   )}
                 </CardContent>
               </Card>
               <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-slate-800 text-sm">Cash</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {showPortfolioSkeleton ? (
-                    <>
-                      <Skeleton className="h-9 w-24 mb-3" />
-                      <Skeleton className="h-4 w-28" />
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-3xl font-bold text-slate-900">${cashValue.toFixed(2)}</div>
-                      <div className="text-sm text-slate-700 mt-2">Token: {balance?.token || "USDC"}</div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-              <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-slate-800 text-sm">Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="flex gap-3">
-                  {showPortfolioSkeleton ? (
-                    <>
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
-                    </>
-                  ) : (
-                    <>
-                      <Button className="flex-1 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white border border-[#3f5e9c] shadow-sm">
-                        Deposit
-                      </Button>
-                      <Button className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-900 border border-[#e6ddcb]">
-                        Withdraw
-                      </Button>
-                    </>
-                  )}
+                <CardContent className="pt-4 pb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-500 text-sm">
+                        {pnlHistory.current_pnl >= 0 ? "▲" : "▼"}
+                      </span>
+                      <span className="text-slate-700 text-sm font-medium">Profit/Loss</span>
+                    </div>
+                    <div className="flex gap-1">
+                      {["1d", "1w", "1m", "all"].map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setPnlPeriod(p)}
+                          className={`px-2 py-1 text-xs rounded ${
+                            pnlPeriod === p
+                              ? "bg-[#4b6ea9] text-white"
+                              : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                          }`}
+                        >
+                          {p.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-3xl font-bold text-slate-900">
+                    {pnlHistory.current_pnl >= 0 ? "" : "-"}${Math.abs(pnlHistory.current_pnl).toFixed(2)}
+                  </div>
+                  <div className="text-xs text-slate-500 mb-2">
+                    {pnlPeriod === "1d" ? "Past Day" : pnlPeriod === "1w" ? "Past Week" : pnlPeriod === "1m" ? "Past Month" : "All Time"}
+                  </div>
+                  <div className="h-24">
+                    {pnlLoading ? (
+                      <Skeleton className="h-full w-full" />
+                    ) : pnlHistory.data.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={pnlHistory.data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                          <defs>
+                            <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#4b6ea9" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#4b6ea9" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <XAxis dataKey="date" hide />
+                          <YAxis hide domain={["dataMin", "dataMax"]} />
+                          <Tooltip
+                            contentStyle={{ background: "#f9f6ee", border: "1px solid #e6ddcb", borderRadius: "4px", fontSize: "12px" }}
+                            formatter={(value) => [`$${value.toFixed(2)}`, "P&L"]}
+                            labelFormatter={(label) => label}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="pnl"
+                            stroke="#4b6ea9"
+                            fill="url(#pnlGradient)"
+                            strokeWidth={2}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-slate-500 text-sm">No data</div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -404,8 +476,8 @@ export default function PortfolioPage() {
                             <th className="px-4 py-3">Market</th>
                             <th className="px-4 py-3">Price</th>
                             <th className="px-4 py-3">Bet</th>
-                            <th className="px-4 py-3">To Win</th>
-                            <th className="px-4 py-3">Value</th>
+                            <th className="px-4 py-3">Cash Out</th>
+                            <th className="px-4 py-3">P&L</th>
                             <th className="px-4 py-3"></th>
                           </tr>
                         </thead>
@@ -447,13 +519,16 @@ export default function PortfolioPage() {
                             <th className="px-4 py-3">Market</th>
                             <th className="px-4 py-3">Price</th>
                             <th className="px-4 py-3">Bet</th>
-                            <th className="px-4 py-3">To Win</th>
-                            <th className="px-4 py-3">Value</th>
+                            <th className="px-4 py-3">Cash Out</th>
+                            <th className="px-4 py-3">P&L</th>
                             <th className="px-4 py-3"></th>
                           </tr>
                         </thead>
                         <tbody>
-                          {positions.map((p, idx) => (
+                          {positions.map((p, idx) => {
+                            const pnl = Number(p.pnl || 0)
+                            const cashOut = Number(p.cash_out_value || 0)
+                            return (
                             <tr key={idx} className="border-b border-[#e6ddcb] last:border-0">
                               <td className="px-4 py-3 text-slate-900">
                                 <Link
@@ -480,11 +555,11 @@ export default function PortfolioPage() {
                                 {p.price ? `${(Number(p.price) * 100).toFixed(1)}¢` : "—"}
                               </td>
                               <td className="px-4 py-3">${Number(p.cost_basis).toFixed(2)}</td>
-                              <td className="px-4 py-3 text-green-400">
-                                ${Number(p.shares).toFixed(2)}
+                              <td className="px-4 py-3">
+                                ${cashOut.toFixed(2)}
                               </td>
-                              <td className="px-4 py-3 text-green-400">
-                                ${Number(p.value).toFixed(2)}
+                              <td className={`px-4 py-3 font-medium ${pnl >= 0 ? "text-green-600" : "text-red-500"}`}>
+                                {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
                               </td>
                               <td className="px-4 py-3">
                                 <Button
@@ -496,10 +571,10 @@ export default function PortfolioPage() {
                                 </Button>
                               </td>
                             </tr>
-                          ))}
+                          )})}
                           {!positions.length && (
                             <tr>
-                              <td className="px-4 py-4 text-center text-slate-700" colSpan={7}>
+                              <td className="px-4 py-4 text-center text-slate-700" colSpan={6}>
                                 No positions yet.
                               </td>
                             </tr>
@@ -701,4 +776,3 @@ export default function PortfolioPage() {
     </div>
   )
 }
-

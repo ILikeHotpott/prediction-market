@@ -103,5 +103,6 @@ temp/
 
 CLAUDE.md
 .claude
+AGENTS.md
 
 .pytest_cache/

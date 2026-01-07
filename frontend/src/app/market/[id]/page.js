@@ -7,6 +7,7 @@ import Comments from "@/components/Comments"
 import LoadingSpinner from "@/components/LoadingSpinner"
 import Toast from "@/components/Toast"
 import { useAuth } from "@/components/auth/AuthProvider"
+import { usePortfolio } from "@/components/PortfolioProvider"
 import { useParams } from "next/navigation"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
@@ -14,6 +15,7 @@ const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:800
 export default function MarketDetail({ params }) {
   const routeParams = useParams()
   const { user, openAuthModal } = useAuth()
+  const { refreshPortfolio } = usePortfolio()
   const [marketId, setMarketId] = useState(null)
   const [eventData, setEventData] = useState(null)
   const [selectedMarketId, setSelectedMarketId] = useState(null)
@@ -400,6 +402,9 @@ export default function MarketDetail({ params }) {
       
       // 清空输入框
       setAmount("0")
+
+      // 更新导航资产概览；只在成功交易后强制刷新
+      refreshPortfolio()
       
       // 异步更新余额和持仓（不阻塞UI）
       fetchBalance().catch(() => {})
@@ -717,4 +722,3 @@ export default function MarketDetail({ params }) {
     </div>
   )
 }
-

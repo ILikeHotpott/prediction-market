@@ -17,8 +17,11 @@ def search(request):
     offset = int(request.GET.get("offset", 0))
 
     filters = []
+    # Default to active status only (same as homepage)
     if status_filter and status_filter != "all":
         filters.append(f'status = "{status_filter}"')
+    else:
+        filters.append('status = "active"')
     if category:
         filters.append(f'category = "{category}"')
 
