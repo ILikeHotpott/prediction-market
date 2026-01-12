@@ -173,7 +173,7 @@ function SearchContent() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background"><Navigation /></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-background"><div className="h-20" /></div>}>
       <SearchContent />
     </Suspense>
   );
