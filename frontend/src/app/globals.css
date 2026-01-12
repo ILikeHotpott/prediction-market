@@ -151,9 +151,9 @@ a,
   overflow: hidden;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.1) 20%,
-    rgba(255, 255, 255, 0.2) 35%,
-    rgba(255, 255, 255, 0.1) 55%
+    #d4cbb8 20%,
+    #c9bea8 35%,
+    #d4cbb8 55%
   );
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.8s ease-in-out infinite;

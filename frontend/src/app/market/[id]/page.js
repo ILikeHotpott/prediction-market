@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef, useCallback } from "react"
 import Navigation from "@/components/Navigation"
 import MarketChart from "@/components/MarketChart"
 import Comments from "@/components/Comments"
-import LoadingSpinner from "@/components/LoadingSpinner"
+import { Skeleton } from "@/components/ui/skeleton"
 import Toast from "@/components/Toast"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { usePortfolio } from "@/components/PortfolioProvider"
@@ -112,7 +112,7 @@ export default function MarketDetail({ params }) {
         (firstMarket?.options || []).sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))[0]
       setSelectedOptionId(normalizeId(firstOption?.id))
     } catch (e) {
-      setError(e.message || "加载失败")
+      setError(e.message || "Failed to load")
     } finally {
       setLoading(false)
     }
@@ -292,25 +292,25 @@ export default function MarketDetail({ params }) {
       return
     }
     if (!selectedMarket) {
-      setError("未找到可交易的子市场")
+      setError("No tradable market found")
       return
     }
     if (!selectedOption) {
-      setError("请选择一个选项")
+      setError("Please select an option")
       return
     }
     if (actionPrice == null || actionPrice <= 0) {
-      setError("价格不可用")
+      setError("Price unavailable")
       return
     }
     if (side === "buy") {
       if (!amountNum || amountNum <= 0) {
-        setError("请输入下单金额")
+        setError("Please enter an amount")
         return
       }
     } else {
       if (!amountNum || amountNum <= 0) {
-        setError("请输入卖出份额")
+        setError("Please enter shares to sell")
         return
       }
     }
@@ -352,22 +352,22 @@ export default function MarketDetail({ params }) {
         body: JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "下单失败")
-      
-      // 显示成功提示
-      const successMsg = isSellSide ? "卖出成功" : "下单成功"
+      if (!res.ok) throw new Error(data.error || "Order failed")
+
+      // Show success message
+      const successMsg = isSellSide ? "Sell successful" : "Order successful"
       setSuccess(successMsg)
       setToastMessage(successMsg)
       setToastType("success")
       
-      // 更新余额
+      // Update balance
       setBalance({
         token: data.token,
         available_amount: data.balance_available,
         locked_amount: balance?.locked_amount ?? "0",
       })
       
-      // 更新持仓
+      // Update positions
       const optId = normalizeId(data.option_id || selectedOption.id)
       if (optId && data.position?.shares != null) {
         const sharesNum = Number(data.position.shares)
@@ -377,7 +377,7 @@ export default function MarketDetail({ params }) {
         }))
       }
       
-      // 使用API响应中的post_prob_bps更新本地价格，避免整页刷新
+      // Update local prices using post_prob_bps from API response to avoid full page refresh
       if (data.post_prob_bps && Array.isArray(data.post_prob_bps) && selectedMarket) {
         setEventData((prev) => {
           if (!prev) return prev
@@ -385,7 +385,7 @@ export default function MarketDetail({ params }) {
             if (normalizeId(market.id) !== normalizeId(selectedMarket.id)) {
               return market
             }
-            // 使用option_index来匹配，因为post_prob_bps数组索引对应option_index
+            // Match using option_index since post_prob_bps array index corresponds to option_index
             const updatedOptions = (market.options || []).map((option) => {
               const optionIdx = option.option_index ?? 0
               const probBps = data.post_prob_bps[optionIdx]
@@ -400,17 +400,17 @@ export default function MarketDetail({ params }) {
         })
       }
       
-      // 清空输入框
+      // Clear input
       setAmount("0")
 
-      // 更新导航资产概览；只在成功交易后强制刷新
+      // Update navigation portfolio overview; force refresh only after successful trade
       refreshPortfolio()
       
-      // 异步更新余额和持仓（不阻塞UI）
+      // Async update balance and positions (non-blocking)
       fetchBalance().catch(() => {})
       fetchPositions().catch(() => {})
     } catch (e) {
-      const errorMsg = e.message || "下单失败"
+      const errorMsg = e.message || "Order failed"
       setError(errorMsg)
       setToastMessage(errorMsg)
       setToastType("error")
@@ -438,8 +438,18 @@ export default function MarketDetail({ params }) {
   const isStandaloneEvent = (eventData?.group_rule || "").toLowerCase() === "standalone"
   const hideOutcomes = isStandaloneEvent
 
+  // Ref for left scrollable area
+  const leftScrollRef = useRef(null)
+
+  // Handle wheel event on the entire page to scroll left area
+  const handleWheel = useCallback((e) => {
+    if (leftScrollRef.current && window.innerWidth >= 1024) {
+      leftScrollRef.current.scrollTop += e.deltaY
+    }
+  }, [])
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen flex flex-col bg-background overflow-hidden lg:overflow-hidden" onWheel={handleWheel}>
       <Navigation />
       <Toast
         message={toastMessage}
@@ -450,21 +460,64 @@ export default function MarketDetail({ params }) {
           setError("")
         }}
       />
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6">
+      <div className="flex-1 overflow-y-auto lg:overflow-hidden">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6 h-full">
         {loading && (
-          <div className="py-10">
-            <LoadingSpinner />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Chart Area Skeleton */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
+                <Skeleton className="h-6 w-2/3 mb-4" />
+                <Skeleton className="h-10 w-32 mb-4" />
+                <Skeleton className="h-[280px] w-full rounded-lg" />
+                <div className="flex gap-2 mt-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-8 w-12 rounded" />
+                  ))}
+                </div>
+              </div>
+              <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
+                <Skeleton className="h-6 w-32 mb-4" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            </div>
+            {/* Sidebar Skeleton */}
+            <div className="space-y-6">
+              <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <Skeleton className="w-14 h-14 rounded-2xl" />
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-3/4 mb-2" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+                <Skeleton className="h-10 w-full mb-4" />
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <Skeleton className="h-16 rounded-xl" />
+                  <Skeleton className="h-16 rounded-xl" />
+                </div>
+                <Skeleton className="h-6 w-24 mb-3" />
+                <Skeleton className="h-16 w-full rounded-xl mb-3" />
+                <div className="grid grid-cols-4 gap-3 mb-6">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-12 rounded-lg" />
+                  ))}
+                </div>
+                <Skeleton className="h-14 w-full rounded-xl" />
+              </div>
+            </div>
           </div>
         )}
         {!loading && error && <div className="text-red-400 mb-4">{error}</div>}
         {!loading && eventData && selectedMarket && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Chart Area */}
-            <div className="lg:col-span-2 space-y-6">
+          <div className="flex flex-col lg:flex-row gap-6 h-full">
+            {/* Main Chart Area - scrollable on desktop */}
+            <div ref={leftScrollRef} className="lg:w-2/3 space-y-6 lg:overflow-y-auto lg:h-full lg:pr-4 lg:pb-12">
               <MarketChart
                 market={selectedMarket}
                 eventId={eventData?.id}
                 eventTitle={eventData?.title}
+                coverUrl={eventData?.cover_url || selectedMarket?.cover_url}
                 eventType={eventData?.group_rule || "standalone"}
                 markets={marketsSorted}
                 hideOutcomes={hideOutcomes}
@@ -477,30 +530,16 @@ export default function MarketDetail({ params }) {
               <Comments marketId={selectedMarket?.id} user={user} openAuthModal={openAuthModal} />
             </div>
 
-            {/* Sidebar */}
-            <div className="space-y-6">
+            {/* Sidebar - fixed on desktop */}
+            <div className="lg:w-1/3 space-y-6 lg:overflow-y-auto lg:h-full">
               {/* Trade Panel */}
               <div className="bg-[#f9f6ee] text-slate-900 rounded-2xl border border-[#e6ddcb] shadow-md p-6">
                 {!isStandaloneEvent && (
-                  <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white border border-[#e6ddcb] flex-shrink-0">
-                      {selectedMarket?.cover_url || eventData?.cover_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={selectedMarket?.cover_url || eventData?.cover_url}
-                          alt={panelTitle || eventData?.title || "Market"}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-2xl">📈</div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-slate-900 text-xl font-semibold leading-tight truncate">
-                        {selectedMarket?.bucket_label || selectedMarket?.title || panelTitle}
-                      </h3>
-                      <div className="text-slate-600 text-xs truncate">{eventData?.title}</div>
-                    </div>
+                  <div className="mb-4">
+                    <h3 className="text-slate-900 text-xl font-semibold leading-tight truncate">
+                      {selectedMarket?.bucket_label || selectedMarket?.title || panelTitle}
+                    </h3>
+                    <div className="text-slate-600 text-xs truncate">{eventData?.title}</div>
                   </div>
                 )}
 
@@ -588,7 +627,7 @@ export default function MarketDetail({ params }) {
                       type="number"
                       value={amount}
                     onChange={(e) => {
-                      // 清除之前的成功/错误消息
+                      // Clear previous success/error messages
                       if (success || error) {
                         setSuccess("")
                         setError("")
@@ -701,7 +740,7 @@ export default function MarketDetail({ params }) {
               </div>
 
               {/* Related Markets placeholder */}
-              <div className="bg-[#f9f6ee] text-slate-900 rounded-lg border border-[#e6ddcb] p-6 shadow-sm">
+              <div className="bg-[#f9f6ee] text-slate-900 rounded-lg border border-[#e6ddcb] p-6 shadow-sm lg:mb-12">
                 <div className="flex gap-4 border-b border-[#e6ddcb] mb-4">
                   <button className="pb-2 border-b-2 border-[#4b6ea9] text-[#2f4b7c] font-semibold text-sm">
                     All
@@ -713,11 +752,12 @@ export default function MarketDetail({ params }) {
                     Markets
                   </button>
                 </div>
-                <div className="space-y-3 text-slate-700 text-sm">更多关联市场即将上线</div>
+                <div className="space-y-3 text-slate-700 text-sm">More related markets coming soon</div>
               </div>
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   )

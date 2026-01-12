@@ -94,16 +94,20 @@ export default function PortfolioPage() {
       portfolioCache.portfolio
     ) {
       setPortfolio(portfolioCache.portfolio)
+      // Still fetch PnL in background
+      fetchPnlHistory(pnlPeriod)
       return
     }
-    fetchPortfolio()
+    // Parallel load: portfolio (fast, no PnL) + PnL history
+    fetchPortfolioFast()
+    fetchPnlHistory(pnlPeriod)
   }, [user])
 
   useEffect(() => {
-    if (user) {
+    if (user && didInitRef.current) {
       fetchPnlHistory(pnlPeriod)
     }
-  }, [user, pnlPeriod])
+  }, [pnlPeriod])
 
   useEffect(() => {
     if (activeTab !== "history" || !user) return
@@ -126,6 +130,57 @@ export default function PortfolioPage() {
       return next === prev ? prev : next
     })
   }, [historyTotal, historyPageSize])
+
+  async function fetchPortfolioFast() {
+    // Fast load without PnL calculation
+    if (fetchGuardRef.current.inFlight) return
+    fetchGuardRef.current.inFlight = true
+    setLoadingPortfolio(true)
+    setError("")
+    setActionMessage("")
+    try {
+      const pRes = await fetchOnce(
+        `portfolio-fast-${user.id}`,
+        () =>
+          fetch(`${backendBase}/api/users/me/portfolio/?include_pnl=false`, {
+            headers: { "X-User-Id": user.id },
+            cache: "no-store",
+          }),
+      )
+      const pData = await pRes.json()
+      if (!pRes.ok) throw new Error(pData.error || "Failed to load portfolio")
+      setPortfolio(pData)
+      setLoadingPortfolio(false)
+      // Fetch full data with PnL in background
+      fetchPortfolioWithPnl()
+    } catch (e) {
+      setError(e.message || "Failed to load")
+      setLoadingPortfolio(false)
+      fetchGuardRef.current.inFlight = false
+      fetchGuardRef.current.last = Date.now()
+    }
+  }
+
+  async function fetchPortfolioWithPnl() {
+    try {
+      const pRes = await fetch(`${backendBase}/api/users/me/portfolio/`, {
+        headers: { "X-User-Id": user.id },
+        cache: "no-store",
+      })
+      const pData = await pRes.json()
+      if (pRes.ok) {
+        setPortfolio(pData)
+        portfolioCache.userId = user.id
+        portfolioCache.portfolio = pData
+        portfolioCache.lastFetched = Date.now()
+      }
+    } catch (e) {
+      // Silent fail for background fetch
+    } finally {
+      fetchGuardRef.current.inFlight = false
+      fetchGuardRef.current.last = Date.now()
+    }
+  }
 
   async function fetchPortfolio() {
     if (fetchGuardRef.current.inFlight) return
@@ -151,7 +206,7 @@ export default function PortfolioPage() {
       portfolioCache.portfolio = pData
       portfolioCache.lastFetched = Date.now()
     } catch (e) {
-      setError(e.message || "加载失败")
+      setError(e.message || "Failed to load")
     } finally {
       fetchGuardRef.current.inFlight = false
       fetchGuardRef.current.last = Date.now()
@@ -199,7 +254,7 @@ export default function PortfolioPage() {
       portfolioCache.history = items
     }
     catch (e) {
-      setError(e.message || "加载失败")
+      setError(e.message || "Failed to load")
     } finally {
       setHistoryLoading(false)
     }
@@ -287,7 +342,7 @@ export default function PortfolioPage() {
     }
     const shares = pos.shares
     if (!shares || Number(shares) <= 0) {
-      setError("可卖出份额不足")
+      setError("Insufficient shares to sell")
       return
     }
     setSellingId(pos.option_id)
@@ -307,12 +362,12 @@ export default function PortfolioPage() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "卖出失败")
-      setActionMessage("卖出成功")
+      if (!res.ok) throw new Error(data.error || "Sell failed")
+      setActionMessage("Sell successful")
       await fetchPortfolio()
       refreshPortfolio()
     } catch (e) {
-      setError(e.message || "卖出失败")
+      setError(e.message || "Sell failed")
     } finally {
       setSellingId(null)
     }
@@ -324,12 +379,12 @@ export default function PortfolioPage() {
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6">
         {!user && (
           <div className="text-center text-slate-800 py-10">
-            请先登录。
+            Please log in first.
             <Button
               className="ml-3 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white border border-[#3f5e9c] shadow-sm"
               onClick={() => openAuthModal("login")}
             >
-              登录
+              Log In
             </Button>
           </div>
         )}
@@ -362,7 +417,7 @@ export default function PortfolioPage() {
                       </div>
                       <div className="mt-4 pt-3 border-t border-[#e6ddcb]">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500 uppercase tracking-wide">Unrealized P&L</span>
+                          <span className="text-xs text-slate-500 uppercase tracking-wide">Total P&L</span>
                           <span className={`text-lg font-semibold ${totalPnl >= 0 ? "text-green-600" : "text-red-500"}`}>
                             {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
                           </span>
@@ -633,14 +688,20 @@ export default function PortfolioPage() {
                                         ? "bg-emerald-900/40 text-emerald-200"
                                         : String(h.side || "").toLowerCase() === "buy"
                                           ? "bg-sky-900/40 text-sky-200"
-                                          : "bg-slate-800 text-slate-200"
+                                          : String(h.side || "").toLowerCase() === "claimed"
+                                            ? "bg-green-600/60 text-green-100"
+                                            : String(h.side || "").toLowerCase() === "lost"
+                                              ? "bg-red-600/50 text-red-100"
+                                              : "bg-slate-800 text-slate-200"
                                     }`}
                                   >
                                     {(() => {
                                       const side = String(h.side || "").toLowerCase()
                                       if (side === "buy") return "Bought"
                                       if (side === "sell") return "Sold"
-                                      if (side === "claim" || side === "claimed") return "Claimed"
+                                      if (side === "claimed") return "Claimed"
+                                      if (side === "lost") return "Lost"
+                                      if (side === "claim") return "Claimed"
                                       return h.side || "—"
                                     })()}
                                   </span>
@@ -689,15 +750,31 @@ export default function PortfolioPage() {
                                 </td>
                                 <td className="px-5 py-3 text-right">
                                   {(() => {
-                                    const raw = Number(h.amount_in ?? h.amount ?? h.price ?? 0)
                                     const side = String(h.side || "").toLowerCase()
-                                    const signed = side === "buy" ? -raw : raw
-                                    const isGain = signed >= 0
-                                    const color = isGain ? "text-green-400" : "text-red-400"
-                                    const value = Number.isFinite(signed) ? Math.abs(signed).toFixed(2) : "—"
+                                    if (side === "claimed") {
+                                      // Claimed: show payout amount (positive, green)
+                                      const payout = Number(h.amount_in || 0)
+                                      return (
+                                        <span className="text-green-400">
+                                          +${payout.toFixed(2)}
+                                        </span>
+                                      )
+                                    }
+                                    if (side === "lost") {
+                                      // Lost: show cost_basis as lost amount (negative, red)
+                                      const lost = Number(h.cost_basis || 0)
+                                      return (
+                                        <span className="text-red-400">
+                                          -${lost.toFixed(2)}
+                                        </span>
+                                      )
+                                    }
+                                    // Buy/Sell: show amount_in as bet amount (positive for display)
+                                    const raw = Number(h.amount_in ?? h.amount ?? h.price ?? 0)
+                                    const value = Number.isFinite(raw) ? raw.toFixed(2) : "—"
                                     return (
-                                      <span className={color}>
-                                        {Number.isFinite(signed) ? `${isGain ? "+" : "-"}$${value}` : "—"}
+                                      <span className="text-slate-700">
+                                        ${value}
                                       </span>
                                     )
                                   })()}
@@ -730,7 +807,7 @@ export default function PortfolioPage() {
                       <PaginationContent>
                         <PaginationItem>
                           <PaginationPrevious
-                            className="text-slate-800"
+                            className="text-slate-900 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40"
                             disabled={historyPage <= 1 || historyLoading}
                             onClick={() => goToPage(historyPage - 1)}
                           >
@@ -741,7 +818,7 @@ export default function PortfolioPage() {
                           typeof p === "number" ? (
                             <PaginationItem key={p}>
                               <PaginationLink
-                                className="text-slate-800 data-[active=true]:bg-[#4b6ea9] data-[active=true]:text-white"
+                                className="text-slate-900 bg-white border border-slate-300 hover:bg-slate-100 data-[active=true]:bg-[#4b6ea9] data-[active=true]:text-white data-[active=true]:border-[#4b6ea9]"
                                 isActive={p === historyPage}
                                 onClick={() => goToPage(p)}
                                 disabled={historyPage === p || historyLoading}
@@ -751,13 +828,13 @@ export default function PortfolioPage() {
                             </PaginationItem>
                           ) : (
                             <PaginationItem key={`${p}-${idx}`}>
-                              <PaginationEllipsis />
+                              <PaginationEllipsis className="text-slate-700" />
                             </PaginationItem>
                           ),
                         )}
                         <PaginationItem>
                           <PaginationNext
-                            className="text-slate-800"
+                            className="text-slate-900 bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40"
                             disabled={historyPage >= historyPageCount || historyLoading}
                             onClick={() => goToPage(historyPage + 1)}
                           >

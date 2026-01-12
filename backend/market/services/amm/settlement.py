@@ -75,33 +75,27 @@ def _get_pool_for_market(market: Market) -> Optional[AmmPool]:
     return None
 
 
-@transaction.atomic
-def resolve_market(
+def _resolve_market_internal(
     *,
     market_id: str,
     winning_option_id: Optional[str] = None,
     winning_option_index: Optional[int] = None,
     resolved_by_user_id: Optional[str] = None,
+    skip_status_update: bool = False,
 ) -> Dict:
     """
-    Mark a market as resolved with a winning option.
-
-    This sets:
-    - market.status = 'resolved'
-    - market.resolved_at = now
-    - market.resolved_option_index = winning option's index
+    Internal function to mark a market as resolved with a winning option.
+    Does NOT have its own transaction - caller must wrap in transaction.atomic().
 
     Args:
         market_id: UUID of the market to resolve
         winning_option_id: ID of the winning option (provide one of id or index)
         winning_option_index: Index of the winning option
         resolved_by_user_id: Optional user who triggered the resolution
+        skip_status_update: If True, don't update market/event status (used by resolve_and_settle)
 
     Returns:
         Dict with resolution details
-
-    Raises:
-        SettlementError: If market not found, already resolved, or invalid option
     """
     if winning_option_id is None and winning_option_index is None:
         raise SettlementError(
@@ -115,8 +109,8 @@ def resolve_market(
     except Market.DoesNotExist:
         raise SettlementError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
 
-    if market.status == "resolved":
-        # Already resolved - return current state (idempotent)
+    if market.status == "resolved" and market.settled_at is not None:
+        # Already resolved AND settled - return current state (idempotent)
         winning_opt = MarketOption.objects.filter(
             market=market, option_index=market.resolved_option_index
         ).first()
@@ -129,7 +123,7 @@ def resolve_market(
             "already_resolved": True,
         }
 
-    if market.status not in ("active", "closed"):
+    if market.status not in ("active", "closed", "resolved"):
         raise SettlementError(
             f"Market cannot be resolved from status '{market.status}'",
             code="INVALID_STATUS",
@@ -150,21 +144,27 @@ def resolve_market(
 
     now = timezone.now()
 
-    # Update market
-    market.status = "resolved"
+    # Only update resolved_option_index, NOT status (status updated after settlement succeeds)
     market.resolved_at = now
     market.resolved_option_index = winning_option.option_index
     market.updated_at = now
-    market.save(update_fields=["status", "resolved_at", "resolved_option_index", "updated_at"])
 
-    # Also update event status if applicable
-    if market.event_id:
-        Event.objects.filter(pk=market.event_id).update(
-            status="resolved",
-            resolved_at=now,
-            resolved_market_id=market.id,
-            updated_at=now,
-        )
+    if skip_status_update:
+        # Don't change status yet - will be set to resolved after settlement succeeds
+        market.save(update_fields=["resolved_at", "resolved_option_index", "updated_at"])
+    else:
+        # Standalone resolve call - set status to resolved
+        market.status = "resolved"
+        market.save(update_fields=["status", "resolved_at", "resolved_option_index", "updated_at"])
+
+        # Also update event status if applicable
+        if market.event_id:
+            Event.objects.filter(pk=market.event_id).update(
+                status="resolved",
+                resolved_at=now,
+                resolved_market_id=market.id,
+                updated_at=now,
+            )
 
     logger.info(
         "Market resolved: market_id=%s, winning_option_id=%s, winning_option_index=%s",
@@ -184,38 +184,75 @@ def resolve_market(
 
 
 @transaction.atomic
-def settle_market(
+def resolve_market(
+    *,
+    market_id: str,
+    winning_option_id: Optional[str] = None,
+    winning_option_index: Optional[int] = None,
+    resolved_by_user_id: Optional[str] = None,
+) -> Dict:
+    """
+    Mark a market as resolved with a winning option.
+
+    NOTE: This only marks the winning option. To pay out winners, call settle_market().
+    For atomic resolve + settle, use resolve_and_settle_market().
+
+    This sets:
+    - market.status = 'resolved'
+    - market.resolved_at = now
+    - market.resolved_option_index = winning option's index
+
+    Args:
+        market_id: UUID of the market to resolve
+        winning_option_id: ID of the winning option (provide one of id or index)
+        winning_option_index: Index of the winning option
+        resolved_by_user_id: Optional user who triggered the resolution
+
+    Returns:
+        Dict with resolution details
+
+    Raises:
+        SettlementError: If market not found, already resolved, or invalid option
+    """
+    return _resolve_market_internal(
+        market_id=market_id,
+        winning_option_id=winning_option_id,
+        winning_option_index=winning_option_index,
+        resolved_by_user_id=resolved_by_user_id,
+        skip_status_update=False,
+    )
+
+
+def _settle_market_internal(
     *,
     market_id: str,
     settlement_tx_id: Optional[str] = None,
     settled_by_user_id: Optional[str] = None,
+    market: Optional[Market] = None,
+    update_status_to_resolved: bool = False,
 ) -> Dict:
     """
-    Pay out winners for a resolved market.
-
-    Settlement payout per winning share = 1 unit of collateral token.
-    Funding source priority: pool_cash first, then collateral_amount.
-
-    Idempotent: If settlement_tx_id already exists for this market, returns existing record.
+    Internal function to pay out winners for a resolved market.
+    Does NOT have its own transaction - caller must wrap in transaction.atomic().
 
     Args:
         market_id: UUID of the market to settle
         settlement_tx_id: Optional unique ID for idempotency (auto-generated if not provided)
         settled_by_user_id: Optional user who triggered the settlement
+        market: Optional pre-locked market object (to avoid re-locking)
+        update_status_to_resolved: If True, update market/event status to resolved after settlement
 
     Returns:
         Dict with settlement details
-
-    Raises:
-        SettlementError: If market not resolved, already settled, or insufficient funds
     """
     if settlement_tx_id is None:
         settlement_tx_id = _generate_settlement_tx_id()
 
-    try:
-        market = Market.objects.select_for_update().get(pk=market_id)
-    except Market.DoesNotExist:
-        raise SettlementError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
+    if market is None:
+        try:
+            market = Market.objects.select_for_update().get(pk=market_id)
+        except Market.DoesNotExist:
+            raise SettlementError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
 
     # Check if already settled
     if market.settled_at is not None:
@@ -231,13 +268,7 @@ def settle_market(
                 "already_settled": True,
             }
 
-    if market.status != "resolved":
-        raise SettlementError(
-            f"Market must be resolved before settlement (current status: {market.status})",
-            code="NOT_RESOLVED",
-            http_status=400,
-        )
-
+    # For resolve_and_settle, market may not be in 'resolved' status yet
     if market.resolved_option_index is None:
         raise SettlementError("Market has no resolved option", code="NO_RESOLVED_OPTION", http_status=400)
 
@@ -257,20 +288,21 @@ def settle_market(
     # Lock the pool
     pool = AmmPool.objects.select_for_update().get(pk=pool.id)
 
-    # Calculate total payout needed
-    # Get all winning positions (shares > 0 for the winning option)
-    winning_positions = list(
-        Position.objects.select_for_update()
-        .filter(market=market, option=winning_option, shares__gt=0)
-    )
-
-    total_winning_shares = sum(Decimal(p.shares) for p in winning_positions)
-    # Each share pays out 1 unit of collateral
-    total_payout = total_winning_shares
-
-    # Determine funding sources
+    # Determine funding sources BEFORE locking positions
     pool_cash = Decimal(pool.pool_cash)
     collateral_amount = Decimal(pool.collateral_amount)
+    token = pool.collateral_token
+    now = timezone.now()
+
+    # FIX: Lock order must match execution.py: Pool -> Balance -> Position
+    # First, get winning positions WITHOUT lock to calculate total payout
+    winning_positions_info = list(
+        Position.objects.filter(market=market, option=winning_option, shares__gt=0)
+        .values("id", "user_id", "shares")
+    )
+
+    total_winning_shares = sum(Decimal(str(p["shares"])) for p in winning_positions_info)
+    total_payout = total_winning_shares
 
     pool_cash_used = Decimal("0")
     collateral_used = Decimal("0")
@@ -284,48 +316,59 @@ def settle_market(
         if remaining > 0:
             if remaining > collateral_amount:
                 raise SettlementError(
-                    f"Insufficient funds: need {remaining} more but only {collateral_amount} collateral available",
+                    f"Insufficient funds: need {remaining} more but only {collateral_amount} collateral available. "
+                    f"pool_cash={pool_cash}, total_payout={total_payout}. "
+                    f"Please add more collateral using the admin API.",
                     code="INSUFFICIENT_FUNDS",
                     http_status=400,
                 )
             collateral_used = remaining
 
-    now = timezone.now()
-    token = pool.collateral_token
+    # FIX: Now lock balances first (matching execution.py lock order), then positions
+    # Collect all user_ids that need balance updates
+    user_ids = [p["user_id"] for p in winning_positions_info]
 
-    # Pay out to winners
-    payouts: List[Dict] = []
-    for position in winning_positions:
-        payout_amount = Decimal(position.shares)
-        if payout_amount <= 0:
-            continue
-
-        # Credit user's balance
+    # Lock all balance rows first (create if needed)
+    balance_map = {}
+    for user_id in user_ids:
         bal = BalanceSnapshot.objects.select_for_update().filter(
-            user_id=position.user_id, token=token
+            user_id=user_id, token=token
         ).first()
-
         if bal is None:
-            # Create balance record
             try:
                 bal = BalanceSnapshot.objects.create(
-                    user_id=position.user_id,
+                    user_id=user_id,
                     token=token,
-                    available_amount=payout_amount,
+                    available_amount=Decimal("0"),
                     locked_amount=Decimal("0"),
                     updated_at=now,
                 )
             except IntegrityError:
                 bal = BalanceSnapshot.objects.select_for_update().get(
-                    user_id=position.user_id, token=token
+                    user_id=user_id, token=token
                 )
-                bal.available_amount = Decimal(bal.available_amount) + payout_amount
-                bal.updated_at = now
-                bal.save(update_fields=["available_amount", "updated_at"])
-        else:
-            bal.available_amount = Decimal(bal.available_amount) + payout_amount
-            bal.updated_at = now
-            bal.save(update_fields=["available_amount", "updated_at"])
+        balance_map[user_id] = bal
+
+    # Now lock positions (after balances, matching execution.py order)
+    winning_positions = list(
+        Position.objects.select_for_update()
+        .filter(market=market, option=winning_option, shares__gt=0)
+    )
+
+    # FIX: Batch update balances using F() for atomicity
+    payouts = []
+    for position in winning_positions:
+        payout_amount = Decimal(position.shares)
+        if payout_amount <= 0:
+            continue
+
+        # Use F() expression for atomic update
+        BalanceSnapshot.objects.filter(
+            user_id=position.user_id, token=token
+        ).update(
+            available_amount=F("available_amount") + payout_amount,
+            updated_at=now,
+        )
 
         payouts.append({
             "user_id": str(position.user_id),
@@ -365,11 +408,26 @@ def settle_market(
             "already_settled": True,
         }
 
-    # Update market
+    # Update market - NOW set status to resolved (after successful payout)
     market.settled_at = now
     market.settlement_tx_id = settlement_tx_id
     market.updated_at = now
-    market.save(update_fields=["settled_at", "settlement_tx_id", "updated_at"])
+
+    if update_status_to_resolved:
+        # This is called from resolve_and_settle - set status to resolved now
+        market.status = "resolved"
+        market.save(update_fields=["status", "settled_at", "settlement_tx_id", "updated_at"])
+
+        # Also update event status
+        if market.event_id:
+            Event.objects.filter(pk=market.event_id).update(
+                status="resolved",
+                resolved_at=now,
+                resolved_market_id=market.id,
+                updated_at=now,
+            )
+    else:
+        market.save(update_fields=["settled_at", "settlement_tx_id", "updated_at"])
 
     logger.info(
         "Market settled: market_id=%s, tx_id=%s, total_payout=%s, pool_cash_used=%s, collateral_used=%s",
@@ -394,6 +452,55 @@ def settle_market(
     }
 
 
+@transaction.atomic
+def settle_market(
+    *,
+    market_id: str,
+    settlement_tx_id: Optional[str] = None,
+    settled_by_user_id: Optional[str] = None,
+) -> Dict:
+    """
+    Pay out winners for a resolved market.
+
+    Settlement payout per winning share = 1 unit of collateral token.
+    Funding source priority: pool_cash first, then collateral_amount.
+
+    Idempotent: If settlement_tx_id already exists for this market, returns existing record.
+
+    Args:
+        market_id: UUID of the market to settle
+        settlement_tx_id: Optional unique ID for idempotency (auto-generated if not provided)
+        settled_by_user_id: Optional user who triggered the settlement
+
+    Returns:
+        Dict with settlement details
+
+    Raises:
+        SettlementError: If market not resolved, already settled, or insufficient funds
+    """
+    # First check market status
+    try:
+        market = Market.objects.select_for_update().get(pk=market_id)
+    except Market.DoesNotExist:
+        raise SettlementError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
+
+    if market.status != "resolved":
+        raise SettlementError(
+            f"Market must be resolved before settlement (current status: {market.status})",
+            code="NOT_RESOLVED",
+            http_status=400,
+        )
+
+    return _settle_market_internal(
+        market_id=market_id,
+        settlement_tx_id=settlement_tx_id,
+        settled_by_user_id=settled_by_user_id,
+        market=market,
+        update_status_to_resolved=False,
+    )
+
+
+@transaction.atomic
 def resolve_and_settle_market(
     *,
     market_id: str,
@@ -402,7 +509,11 @@ def resolve_and_settle_market(
     settled_by_user_id: Optional[str] = None,
 ) -> Dict:
     """
-    Convenience function to resolve and settle a market in one call.
+    Resolve and settle a market in one ATOMIC transaction.
+
+    This ensures that if settlement fails (e.g., insufficient funds),
+    the market status will NOT be changed to 'resolved'.
+    Status is only set to 'resolved' AFTER all payouts are successfully completed.
 
     Args:
         market_id: UUID of the market
@@ -413,16 +524,20 @@ def resolve_and_settle_market(
     Returns:
         Dict with both resolution and settlement details
     """
-    resolve_result = resolve_market(
+    # Step 1: Resolve (but don't update status yet)
+    resolve_result = _resolve_market_internal(
         market_id=market_id,
         winning_option_id=winning_option_id,
         winning_option_index=winning_option_index,
         resolved_by_user_id=settled_by_user_id,
+        skip_status_update=True,  # Don't set status to resolved yet
     )
 
-    settle_result = settle_market(
+    # Step 2: Settle and update status to resolved (only if settlement succeeds)
+    settle_result = _settle_market_internal(
         market_id=market_id,
         settled_by_user_id=settled_by_user_id,
+        update_status_to_resolved=True,  # Set status to resolved after successful payout
     )
 
     return {

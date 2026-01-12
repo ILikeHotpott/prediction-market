@@ -13,8 +13,8 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 import os
 from urllib.parse import urlparse
-import os
 import dotenv
+import logging
 dotenv.load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,15 +25,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-z0k&ac97v-zl=d(sk7k+8^ftbgux&s)zn0##8y6==c0d)g=%xy"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-z0k&ac97v-zl=d(sk7k+8^ftbgux&s)zn0##8y6==c0d)g=%xy")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
 
+# Default to localhost for development, override via DJANGO_ALLOWED_HOSTS in production
 ALLOWED_HOSTS = (
     os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
     if os.getenv("DJANGO_ALLOWED_HOSTS")
-    else []
+    else ["localhost", "127.0.0.1"]
 )
 
 
@@ -53,11 +54,22 @@ INSTALLED_APPS = [
 
 ASGI_APPLICATION = "monofuture.asgi.application"
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
+# Channel Layers - use Redis in production, InMemory for development
+if os.getenv("REDIS_URL"):
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [os.getenv("REDIS_URL")],
+            },
+        }
     }
-}
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
+    }
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -104,14 +116,20 @@ DATABASES = {
 supabase_db_url = os.getenv("SUPABASE_DB_URL")
 if supabase_db_url:
     parsed = urlparse(supabase_db_url)
+    # Use Transaction mode (port 6543) for better connection pooling
+    # Session mode (5432) has limited connections, Transaction mode (6543) supports more
+    db_port = os.getenv("SUPABASE_DB_PORT", "6543")
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": parsed.path.lstrip("/"),
         "USER": parsed.username,
         "PASSWORD": parsed.password,
         "HOST": parsed.hostname,
-        "PORT": parsed.port or "5432",
+        "PORT": db_port,
         "OPTIONS": {"sslmode": os.getenv("SUPABASE_DB_SSLMODE", "require")},
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        # Required for Supabase Transaction mode (port 6543)
+        "DISABLE_SERVER_SIDE_CURSORS": True,
     }
 elif os.getenv("SUPABASE_DB_NAME"):
     DATABASES["default"] = {
@@ -120,8 +138,11 @@ elif os.getenv("SUPABASE_DB_NAME"):
         "USER": os.getenv("SUPABASE_DB_USER"),
         "PASSWORD": os.getenv("SUPABASE_DB_PASSWORD"),
         "HOST": os.getenv("SUPABASE_DB_HOST"),
-        "PORT": os.getenv("SUPABASE_DB_PORT", "5432"),
+        "PORT": os.getenv("SUPABASE_DB_PORT", "6543"),
         "OPTIONS": {"sslmode": os.getenv("SUPABASE_DB_SSLMODE", "require")},
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        # Required for Supabase Transaction mode (port 6543)
+        "DISABLE_SERVER_SIDE_CURSORS": True,
     }
 
 

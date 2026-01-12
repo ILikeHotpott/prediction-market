@@ -224,10 +224,10 @@ export default function Comments({ marketId, user, openAuthModal }) {
             </Select>
           </div>
 
-          <div className="ml-auto text-amber-300/90 text-sm flex items-center gap-2">
+          {/* <div className="ml-auto text-amber-300/90 text-sm flex items-center gap-2">
             <span className="text-lg">⚠️</span>
             <span>Beware of external links.</span>
-          </div>
+          </div> */}
         </div>
 
         {error && <div className="text-red-600 text-sm">{error}</div>}

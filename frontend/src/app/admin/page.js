@@ -145,7 +145,7 @@ export default function AdminMarketsPage() {
       const data = await res.json();
       setEvents(Array.isArray(data.items) ? data.items : []);
     } catch (err) {
-      setError("加载事件列表失败");
+      setError("Failed to load events");
     }
   }
 
@@ -211,10 +211,10 @@ export default function AdminMarketsPage() {
         body: formData,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "上传失败");
+      if (!res.ok) throw new Error(data.error || "Upload failed");
       handleChange("cover_url", data.url);
     } catch (err) {
-      setError(err.message || "上传失败");
+      setError(err.message || "Upload failed");
     } finally {
       setUploading(false);
     }
@@ -267,9 +267,9 @@ export default function AdminMarketsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "创建失败");
+        setError(data.error || "Creation failed");
       } else {
-        setSuccess("创建成功，状态已设为 draft");
+        setSuccess("Created successfully, status set to draft");
         setForm({
           title: "",
           description: "",
@@ -289,7 +289,7 @@ export default function AdminMarketsPage() {
         fetchEvents();
       }
     } catch (err) {
-      setError("创建失败");
+      setError("Creation failed");
     } finally {
       setLoading(false);
     }
@@ -305,13 +305,13 @@ export default function AdminMarketsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "发布失败");
+        setError(data.error || "Publish failed");
       } else {
-        setSuccess("发布成功");
+        setSuccess("Published successfully");
         fetchEvents();
       }
     } catch (err) {
-      setError("发布失败");
+      setError("Publish failed");
     }
   }
 
@@ -329,13 +329,13 @@ export default function AdminMarketsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "更新状态失败");
+        setError(data.error || "Status update failed");
       } else {
-        setSuccess("状态已更新");
+        setSuccess("Status updated");
         fetchEvents();
       }
     } catch (err) {
-      setError("更新状态失败");
+      setError("Status update failed");
     }
   }
 
@@ -349,13 +349,13 @@ export default function AdminMarketsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "加载事件数据失败");
+        setError(data.error || "Failed to load event data");
         return;
       }
       setSelectedEvent(data);
       setResolveDialogOpen(true);
     } catch (err) {
-      setError("加载事件数据失败");
+      setError("Failed to load event data");
     }
   }
 
@@ -372,46 +372,46 @@ export default function AdminMarketsPage() {
         <header className="flex items-center justify-between mb-6">
           <div>
             <div className="text-sm text-gray-300">Admin</div>
-            <h1 className="text-3xl font-semibold">市场管理</h1>
+            <h1 className="text-3xl font-semibold">Market Management</h1>
           </div>
           <span className="text-sm text-gray-400">
-            后端地址：{backendBase}
+            Backend URL: {backendBase}
           </span>
         </header>
 
         {userRole === "admin" ? (
           <>
         <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">创建新事件（draft）</h2>
+          <h2 className="text-xl font-semibold mb-4">Create New Event (draft)</h2>
           <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={handleCreate}>
             <div className="md:col-span-2">
-              <label className="text-sm text-gray-300">标题 *</label>
+              <label className="text-sm text-gray-300">Title *</label>
               <input
                 className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
                 value={form.title}
                 onChange={(e) => handleChange("title", e.target.value)}
-                placeholder="市场标题"
+                placeholder="Market title"
                 required
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-sm text-gray-300">描述 *</label>
+              <label className="text-sm text-gray-300">Description *</label>
               <textarea
                 className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white h-28"
                 value={form.description}
                 onChange={(e) => handleChange("description", e.target.value)}
-                placeholder="简要描述"
+                placeholder="Brief description"
                 required
               />
             </div>
             <div>
-              <label className="text-sm text-gray-300">类别</label>
+              <label className="text-sm text-gray-300">Category</label>
               <select
                 className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
                 value={form.category}
                 onChange={(e) => handleChange("category", e.target.value)}
               >
-                <option value="">请选择类别</option>
+                <option value="">Select category</option>
                 {ADMIN_CATEGORIES.map((cat) => (
                   <option key={cat.value} value={cat.value}>
                     {cat.label}
@@ -420,7 +420,7 @@ export default function AdminMarketsPage() {
               </select>
             </div>
             <div>
-              <label className="text-sm text-gray-300">封面图片</label>
+              <label className="text-sm text-gray-300">Cover Image</label>
               <div className="mt-1 flex items-center gap-3">
                 <input
                   ref={fileInputRef}
@@ -435,13 +435,13 @@ export default function AdminMarketsPage() {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
                 >
-                  {uploading ? "上传中..." : "选择图片"}
+                  {uploading ? "Uploading..." : "Select Image"}
                 </Button>
                 {form.cover_url && (
                   <div className="flex items-center gap-2">
                     <img
                       src={form.cover_url}
-                      alt="封面预览"
+                      alt="Cover preview"
                       className="h-10 w-10 object-cover rounded"
                     />
                     <span className="text-xs text-gray-400 truncate max-w-[150px]">
@@ -452,7 +452,7 @@ export default function AdminMarketsPage() {
                       onClick={() => handleChange("cover_url", "")}
                       className="text-red-400 text-xs hover:text-red-300"
                     >
-                      删除
+                      Delete
                     </button>
                   </div>
                 )}
@@ -464,16 +464,16 @@ export default function AdminMarketsPage() {
                 className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
                 value={form.slug}
                 onChange={(e) => handleChange("slug", e.target.value)}
-                placeholder="唯一标识，可选"
+                placeholder="Unique identifier, optional"
               />
             </div>
             <div>
-              <label className="text-sm text-gray-300">链/Network</label>
+              <label className="text-sm text-gray-300">Chain/Network</label>
               <input
                 className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
                 value={form.chain}
                 onChange={(e) => handleChange("chain", e.target.value)}
-                placeholder="例如: base, polygon"
+                placeholder="e.g. base, polygon"
               />
             </div>
             <div>
@@ -483,13 +483,13 @@ export default function AdminMarketsPage() {
                 value={form.group_rule}
                 onChange={(e) => handleChange("group_rule", e.target.value)}
               >
-                <option value="standalone">Standalone（单个子市场，Yes/No）</option>
-                <option value="exclusive">Exclusive（多个子市场，仅选一个答案）</option>
-                <option value="independent">Independent（多个子市场，可多选）</option>
+                <option value="standalone">Standalone (single sub-market, Yes/No)</option>
+                <option value="exclusive">Exclusive (multiple sub-markets, pick one answer)</option>
+                <option value="independent">Independent (multiple sub-markets, multi-select)</option>
               </select>
             </div>
             <div>
-              <label className="text-sm text-gray-300">交易截止时间 *</label>
+              <label className="text-sm text-gray-300">Trading Deadline *</label>
               <input
                 type="datetime-local"
                 className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
@@ -499,7 +499,7 @@ export default function AdminMarketsPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-gray-300">结算截止时间</label>
+              <label className="text-sm text-gray-300">Resolution Deadline</label>
               <input
                 type="datetime-local"
                 className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
@@ -510,14 +510,14 @@ export default function AdminMarketsPage() {
 
             <div className="md:col-span-2 flex items-center gap-4 mt-2">
               <Button type="submit" disabled={!validToSubmit || loading}>
-                {loading ? "创建中..." : "创建草稿市场"}
+                {loading ? "Creating..." : "Create Draft Market"}
               </Button>
               {error && <span className="text-red-400">{error}</span>}
               {success && <span className="text-green-400">{success}</span>}
             </div>
             <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-sm text-gray-300">AMM 模型</label>
+                <label className="text-sm text-gray-300">AMM Model</label>
                 <input
                   className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
                   value={form.amm_model}
@@ -526,7 +526,7 @@ export default function AdminMarketsPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-300">AMM b（流动性参数） *</label>
+                <label className="text-sm text-gray-300">AMM b (Liquidity Parameter) *</label>
                 <input
                   type="number"
                   className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
@@ -538,7 +538,7 @@ export default function AdminMarketsPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-300">交易费（bps） *</label>
+                <label className="text-sm text-gray-300">Trading Fee (bps) *</label>
                 <input
                   type="number"
                   className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
@@ -550,12 +550,12 @@ export default function AdminMarketsPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-300">抵押资产标识 *</label>
+                <label className="text-sm text-gray-300">Collateral Token *</label>
                 <input
                   className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
                   value={form.amm_collateral_token}
                   onChange={(e) => handleChange("amm_collateral_token", e.target.value)}
-                  placeholder="如 USDC 或合约地址"
+                  placeholder="e.g. USDC or contract address"
                   required
                 />
               </div>
@@ -563,14 +563,14 @@ export default function AdminMarketsPage() {
           </form>
           {form.group_rule === "standalone" ? (
             <div className="mt-6 text-sm text-gray-300">
-              Standalone 模式下将自动创建一个二元市场（Yes / No），无需添加子市场。
+              Standalone mode will automatically create a binary market (Yes / No), no need to add sub-markets.
             </div>
           ) : (
             <div className="mt-6">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-semibold">子市场（至少 2 个）</h3>
+                <h3 className="text-lg font-semibold">Sub-markets (at least 2)</h3>
                 <Button variant="outline" size="sm" onClick={addMarket}>
-                  添加子市场
+                  Add Sub-market
                 </Button>
               </div>
               <div className="space-y-3">
@@ -580,12 +580,12 @@ export default function AdminMarketsPage() {
                     className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-[#0f172a] border border-[#334155] rounded-lg p-3"
                   >
                     <div className="md:col-span-9">
-                      <label className="text-xs text-gray-400">子市场标题 *</label>
+                      <label className="text-xs text-gray-400">Sub-market Title *</label>
                       <input
                         className="w-full mt-1 bg-[#111827] border border-[#1f2937] rounded-lg p-2 text-white"
                         value={opt.title}
                         onChange={(e) => handleMarketChange(idx, "title", e.target.value)}
-                        placeholder={`子市场 ${idx + 1}`}
+                        placeholder={`Sub-market ${idx + 1}`}
                         required
                       />
                     </div>
@@ -596,7 +596,7 @@ export default function AdminMarketsPage() {
                         disabled={(form.markets || []).length <= 2}
                         onClick={() => removeMarket(idx)}
                       >
-                        删除
+                        Delete
                       </Button>
                     </div>
                   </div>
@@ -608,7 +608,7 @@ export default function AdminMarketsPage() {
 
         <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">事件列表</h2>
+            <h2 className="text-xl font-semibold">Event List</h2>
             <div className="flex items-center gap-4">
               <select
                 className="bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white text-sm"
@@ -624,7 +624,7 @@ export default function AdminMarketsPage() {
                 <option value="canceled">Canceled</option>
               </select>
               <Button variant="outline" onClick={fetchEvents}>
-                刷新
+                Refresh
               </Button>
             </div>
           </div>
@@ -632,12 +632,12 @@ export default function AdminMarketsPage() {
             <table className="min-w-full text-sm">
               <thead className="text-gray-300">
                 <tr className="text-left">
-                  <th className="p-2">标题</th>
-                  <th className="p-2">状态</th>
-                  <th className="p-2">子市场</th>
-                  <th className="p-2">交易截止</th>
+                  <th className="p-2">Title</th>
+                  <th className="p-2">Status</th>
+                  <th className="p-2">Sub-markets</th>
+                  <th className="p-2">Trading Deadline</th>
                   <th className="p-2">Slug</th>
-                  <th className="p-2">操作</th>
+                  <th className="p-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -711,6 +711,13 @@ export default function AdminMarketsPage() {
                             Resolve
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.location.href = `/admin/edit/${m.id}`}
+                        >
+                          Edit
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -718,7 +725,7 @@ export default function AdminMarketsPage() {
                 {!pagedEvents.length && (
                   <tr>
                     <td className="p-4 text-gray-400" colSpan={6}>
-                      {statusFilter === "all" ? "暂无事件" : `暂无 ${statusFilter} 状态的事件`}
+                      {statusFilter === "all" ? "No events" : `No ${statusFilter} events`}
                     </td>
                   </tr>
                 )}
@@ -728,7 +735,7 @@ export default function AdminMarketsPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#334155]">
               <div className="text-sm text-gray-400">
-                共 {filteredEvents.length} 条，第 {currentPage}/{totalPages} 页
+                Total {filteredEvents.length} items, Page {currentPage}/{totalPages}
               </div>
               <Pagination>
                 <PaginationContent>
@@ -737,7 +744,7 @@ export default function AdminMarketsPage() {
                       disabled={currentPage <= 1}
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                     >
-                      上一页
+                      Previous
                     </PaginationPrevious>
                   </PaginationItem>
                   {pageList.map((p, idx) =>
@@ -761,7 +768,7 @@ export default function AdminMarketsPage() {
                       disabled={currentPage >= totalPages}
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     >
-                      下一页
+                      Next
                     </PaginationNext>
                   </PaginationItem>
                 </PaginationContent>
@@ -778,7 +785,7 @@ export default function AdminMarketsPage() {
         ) : (
           <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6">
             <div className="text-white text-lg">
-              {authLoading ? "加载中..." : "仅管理员可访问此页面"}
+              {authLoading ? "Loading..." : "Admin access only"}
             </div>
           </section>
         )}

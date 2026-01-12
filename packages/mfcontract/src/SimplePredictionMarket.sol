@@ -73,7 +73,7 @@ contract SimplePredictionMarket is Ownable, ReentrancyGuard {
         require(_duration > 0, "Duration must be greater than 0");
         require(
             bytes(_optionA).length > 0 && bytes(_optionB).length > 0,
-            "Options cannot beempty"
+            "Options cannot be empty"
         );
 
         uint256 marketId = marketCount++;
@@ -93,7 +93,7 @@ contract SimplePredictionMarket is Ownable, ReentrancyGuard {
         uint256 _marketId,
         bool _isOptionA,
         uint256 _amount
-    ) external {
+    ) external nonReentrant {
         Market storage market = markets[_marketId];
         require(
             block.timestamp < market.endTime,
@@ -133,7 +133,7 @@ contract SimplePredictionMarket is Ownable, ReentrancyGuard {
         emit MarketResolved(_marketId, _outcome);
     }
 
-    function claimWinnings(uint256 _marketId) external {
+    function claimWinnings(uint256 _marketId) external nonReentrant {
         Market storage market = markets[_marketId];
         require(market.resolved, "Market not resolved yet");
 

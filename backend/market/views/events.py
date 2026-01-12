@@ -18,6 +18,24 @@ from ..services.serializers import serialize_event
 
 logger = logging.getLogger(__name__)
 
+
+def _index_event_async(event_data: dict):
+    """Index event to meilisearch (fire and forget)."""
+    try:
+        from ..services.search import index_event
+        index_event(event_data)
+    except Exception as e:
+        logger.warning("Failed to index event %s: %s", event_data.get("id"), e)
+
+
+def _delete_event_index_async(event_id: str):
+    """Delete event from meilisearch index (fire and forget)."""
+    try:
+        from ..services.search import delete_event
+        delete_event(event_id)
+    except Exception as e:
+        logger.warning("Failed to delete event %s from index: %s", event_id, e)
+
 ALLOWED_EVENT_STATUSES = {
     "draft",
     "pending",
@@ -38,7 +56,8 @@ def _decode_payload(request):
 
 
 def _prefetched_event(event_id):
-    options_qs = MarketOption.objects.prefetch_related("stats").order_by("option_index")
+    # Use select_related for stats (OneToOne) instead of prefetch_related to avoid N+1
+    options_qs = MarketOption.objects.select_related("stats").order_by("option_index")
     markets_qs = Market.objects.order_by("sort_weight", "-created_at").prefetch_related(
         Prefetch("options", queryset=options_qs, to_attr="prefetched_options")
     )
@@ -312,7 +331,8 @@ def list_events(request):
     Lightweight listing for homepage cards (events with primary market snapshot).
     Supports ?category=xxx filter.
     """
-    options_qs = MarketOption.objects.prefetch_related("stats").order_by("option_index")
+    # Use select_related for stats (OneToOne) instead of prefetch_related to avoid N+1
+    options_qs = MarketOption.objects.select_related("stats").order_by("option_index")
     is_admin = False
     user = get_user_from_request(request)
     if user and user.role == "admin":
@@ -416,7 +436,9 @@ def create_event(request):
 
     event = _create_event_with_markets(event_fields, markets_data, amm_params_list, payload, created_by)
     event = _prefetched_event(event.id)
-    return JsonResponse(serialize_event(event), status=201)
+    event_data = serialize_event(event)
+    _index_event_async(event_data)
+    return JsonResponse(event_data, status=201)
 
 
 @csrf_exempt
@@ -452,7 +474,9 @@ def publish_event(request, event_id):
             ensure_pool_initialized(market=market, amm_params=normalize_amm_params())
 
     event = _prefetched_event(event_id)
-    return JsonResponse(serialize_event(event), status=200)
+    event_data = serialize_event(event)
+    _index_event_async(event_data)
+    return JsonResponse(event_data, status=200)
 
 
 @csrf_exempt
@@ -488,4 +512,84 @@ def update_event_status(request, event_id):
             Market.objects.filter(event=event).update(status=new_status, updated_at=now)
 
     event = _prefetched_event(event_id)
-    return JsonResponse(serialize_event(event), status=200)
+    event_data = serialize_event(event)
+    # Only delete from search index when canceled (resolved events stay visible for 3 days)
+    if new_status == "canceled":
+        _delete_event_index_async(str(event_id))
+    else:
+        _index_event_async(event_data)
+    return JsonResponse(event_data, status=200)
+
+
+@csrf_exempt
+@require_http_methods(["POST", "OPTIONS"])
+def update_event(request, event_id):
+    """Update event fields (admin only)."""
+    if request.method == "OPTIONS":
+        return JsonResponse({}, status=200)
+    admin_error = require_admin(request)
+    if admin_error:
+        return JsonResponse({"error": admin_error["error"]}, status=admin_error["status"])
+
+    payload, error = _decode_payload(request)
+    if error:
+        return error
+
+    try:
+        event = Event.objects.get(pk=event_id)
+    except Event.DoesNotExist:
+        return JsonResponse({"error": "Event not found"}, status=404)
+
+    # Updatable fields
+    if "title" in payload:
+        event.title = payload["title"]
+    if "description" in payload:
+        event.description = payload["description"]
+    if "cover_url" in payload:
+        event.cover_url = payload["cover_url"]
+    if "category" in payload:
+        event.category = payload["category"]
+    if "slug" in payload:
+        event.slug = payload["slug"]
+    if "sort_weight" in payload:
+        event.sort_weight = payload["sort_weight"]
+    if "is_hidden" in payload:
+        event.is_hidden = payload["is_hidden"]
+    if "trading_deadline" in payload:
+        event.trading_deadline = parse_iso_datetime(payload["trading_deadline"])
+    if "resolution_deadline" in payload:
+        event.resolution_deadline = parse_iso_datetime(payload["resolution_deadline"])
+
+    event.updated_at = timezone.now()
+    event.save()
+
+    # Also update markets if needed
+    markets_payload = payload.get("markets")
+    if markets_payload:
+        for m_data in markets_payload:
+            m_id = m_data.get("id")
+            if not m_id:
+                continue
+            try:
+                market = Market.objects.get(pk=m_id, event=event)
+                if "title" in m_data:
+                    market.title = m_data["title"]
+                if "description" in m_data:
+                    market.description = m_data["description"]
+                if "bucket_label" in m_data:
+                    market.bucket_label = m_data["bucket_label"]
+                if "sort_weight" in m_data:
+                    market.sort_weight = m_data["sort_weight"]
+                if "trading_deadline" in m_data:
+                    market.trading_deadline = parse_iso_datetime(m_data["trading_deadline"])
+                if "resolution_deadline" in m_data:
+                    market.resolution_deadline = parse_iso_datetime(m_data["resolution_deadline"])
+                market.updated_at = timezone.now()
+                market.save()
+            except Market.DoesNotExist:
+                pass
+
+    event = _prefetched_event(event_id)
+    event_data = serialize_event(event)
+    _index_event_async(event_data)
+    return JsonResponse(event_data, status=200)

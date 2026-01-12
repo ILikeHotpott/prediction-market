@@ -96,14 +96,15 @@ function normalizeEvents(items) {
 
 function SkeletonCard() {
   return (
-    <div className="market-card" style={{ height: 200 }}>
+    <div className="market-card bg-[#f9f6ee] border border-[#e6ddcb] rounded-xl" style={{ height: 200 }}>
       <div className="p-4 space-y-3">
-        <Skeleton className="h-5 w-3/4 bg-[#e6ddcb]" />
-        <Skeleton className="h-4 w-1/2 bg-[#e6ddcb]" />
+        <Skeleton className="h-5 w-3/4 bg-[#d4c9b5]" />
+        <Skeleton className="h-4 w-1/2 bg-[#d4c9b5]" />
         <div className="flex gap-2 mt-4">
-          <Skeleton className="h-8 w-16 bg-[#e6ddcb]" />
-          <Skeleton className="h-8 w-16 bg-[#e6ddcb]" />
+          <Skeleton className="h-8 w-16 bg-[#d4c9b5]" />
+          <Skeleton className="h-8 w-16 bg-[#d4c9b5]" />
         </div>
+        <Skeleton className="h-4 w-1/3 mt-2 bg-[#d4c9b5]" />
       </div>
     </div>
   )
@@ -114,8 +115,11 @@ export default function MarketGrid() {
   const category = searchParams.get("category")
   const { user } = useAuth()
 
-  // Initialize with empty array to avoid hydration mismatch
-  const [markets, setMarkets] = useState([])
+  // Try to get cached data immediately for faster initial render
+  const [markets, setMarkets] = useState(() => {
+    if (typeof window === "undefined") return []
+    return getCachedEvents(category) || []
+  })
   const [watchedIds, setWatchedIds] = useState(new Set())
   const [spinningColumns, setSpinningColumns] = useState([false, false, false])
   const [isSpinning, setIsSpinning] = useState(false)
@@ -124,29 +128,36 @@ export default function MarketGrid() {
   const spinTimers = useRef([])
   const bodyOverflowRef = useRef()
   const hasFetched = useRef(false)
+  const isTogglingRef = useRef(false)
 
   // Set mounted flag after hydration
   useEffect(() => {
     setMounted(true)
-  }, [])
-
-  // Load cached data after mount to avoid hydration mismatch
-  useEffect(() => {
-    if (!mounted) return
-    const cached = getCachedEvents(category)
-    if (cached) setMarkets(cached)
-    // Always refresh in background (SWR pattern)
+    // Start fetching immediately, don't wait for another effect cycle
     fetchEventsData(category).then((data) => {
       if (data) {
         setMarkets(data)
         setCachedEvents(category, data)
       }
     }).catch(() => {})
-    // Prefetch other categories on first load
+    // Prefetch other categories
     if (!hasFetched.current) {
       hasFetched.current = true
       setTimeout(prefetchAllCategories, 100)
     }
+  }, [])
+
+  // Handle category changes after initial mount
+  useEffect(() => {
+    if (!mounted) return
+    const cached = getCachedEvents(category)
+    if (cached) setMarkets(cached)
+    fetchEventsData(category).then((data) => {
+      if (data) {
+        setMarkets(data)
+        setCachedEvents(category, data)
+      }
+    }).catch(() => {})
   }, [category, mounted])
 
   useEffect(() => {
@@ -154,41 +165,47 @@ export default function MarketGrid() {
   }, [user])
 
   async function fetchWatchlist() {
-    if (!user) return
+    if (!user || isTogglingRef.current) return
     try {
       const res = await fetch(`${backendBase}/api/watchlist/`, { headers: { "X-User-Id": user.id } })
       const data = await res.json()
-      if (res.ok) setWatchedIds(new Set(data.event_ids || []))
+      if (res.ok && !isTogglingRef.current) setWatchedIds(new Set(data.event_ids || []))
     } catch {}
   }
 
   const toggleWatchlist = useCallback(async (eventId) => {
-    if (!user) return
-    const wasWatched = watchedIds.has(eventId)
+    if (!user || isTogglingRef.current) return
+    isTogglingRef.current = true
+
     setWatchedIds((prev) => {
       const next = new Set(prev)
-      wasWatched ? next.delete(eventId) : next.add(eventId)
+      prev.has(eventId) ? next.delete(eventId) : next.add(eventId)
       return next
     })
+
     try {
       const res = await fetch(`${backendBase}/api/watchlist/${eventId}/toggle/`, {
         method: "POST", headers: { "X-User-Id": user.id },
       })
       if (!res.ok) {
+        // Revert on failure
         setWatchedIds((prev) => {
           const next = new Set(prev)
-          wasWatched ? next.add(eventId) : next.delete(eventId)
+          prev.has(eventId) ? next.delete(eventId) : next.add(eventId)
           return next
         })
       }
     } catch {
+      // Revert on error
       setWatchedIds((prev) => {
         const next = new Set(prev)
-        wasWatched ? next.add(eventId) : next.delete(eventId)
+        prev.has(eventId) ? next.delete(eventId) : next.add(eventId)
         return next
       })
+    } finally {
+      isTogglingRef.current = false
     }
-  }, [user, watchedIds])
+  }, [user])
 
   useEffect(() => {
     if (typeof document === "undefined") return
@@ -237,8 +254,8 @@ export default function MarketGrid() {
     })
   }
 
-  // Show skeleton cards if no data yet
-  const showSkeleton = markets.length === 0
+  // Show skeleton cards if no data yet or not mounted (to avoid hydration mismatch)
+  const showSkeleton = !mounted || markets.length === 0
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 pb-16 relative">

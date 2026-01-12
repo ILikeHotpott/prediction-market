@@ -258,6 +258,13 @@ def place_buy_order(request, market_id):
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
+    # Check if market is resolved or canceled
+    market = Market.objects.filter(pk=market_id).first()
+    if not market:
+        return JsonResponse({"error": "Market not found"}, status=404)
+    if market.status in ("resolved", "canceled"):
+        return JsonResponse({"error": "Market is no longer accepting orders"}, status=400)
+
     payload = parse_json_body(request)
     if payload is None:
         return JsonResponse({"error": "Invalid JSON body"}, status=400)
@@ -275,6 +282,13 @@ def place_sell_order(request, market_id):
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
+    # Check if market is resolved or canceled
+    market = Market.objects.filter(pk=market_id).first()
+    if not market:
+        return JsonResponse({"error": "Market not found"}, status=404)
+    if market.status in ("resolved", "canceled"):
+        return JsonResponse({"error": "Market is no longer accepting orders"}, status=400)
+
     payload = parse_json_body(request)
     if payload is None:
         return JsonResponse({"error": "Invalid JSON body"}, status=400)
@@ -287,7 +301,6 @@ def place_sell_order(request, market_id):
 def place_order(request, market_id):
     """
     Backward-compatible entrypoint. Routes to buy/sell by payload.side.
-    ✅ 不再 rewrite request._body，避免 brittle 行为。
     """
     if request.method == "OPTIONS":
         return JsonResponse({}, status=200)
@@ -295,6 +308,13 @@ def place_order(request, market_id):
     user = get_user_from_request(request)
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
+
+    # Check if market is resolved or canceled
+    market = Market.objects.filter(pk=market_id).first()
+    if not market:
+        return JsonResponse({"error": "Market not found"}, status=404)
+    if market.status in ("resolved", "canceled"):
+        return JsonResponse({"error": "Market is no longer accepting orders"}, status=400)
 
     payload = parse_json_body(request)
     if payload is None:

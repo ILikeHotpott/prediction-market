@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import Navigation from "@/components/Navigation"
 import MarketCard from "@/components/MarketCard"
 import { useAuth } from "@/components/auth/AuthProvider"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -89,7 +90,15 @@ export default function WatchlistPage() {
         )}
 
         {user && loading && (
-          <div className="text-center text-muted-foreground py-20">Loading...</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-4 space-y-3">
+                <Skeleton className="h-32 w-full rounded-lg" />
+                <Skeleton className="h-5 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ))}
+          </div>
         )}
 
         {user && !loading && events.length === 0 && (

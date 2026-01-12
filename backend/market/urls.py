@@ -1,8 +1,17 @@
 from django.urls import path
+from django.http import JsonResponse
 
 from .views import admin, amm, comments, events, market, orders, redemption, search, series, upload, users, watchlist
 
+
+def health_check(request):
+    return JsonResponse({"status": "healthy"})
+
+
 urlpatterns = [
+    # Health check
+    path("api/health/", health_check, name="health-check"),
+
     # Search API
     path("api/search/", search.search, name="search"),
     path("api/search/reindex/", search.reindex_events, name="search-reindex"),
@@ -23,6 +32,11 @@ urlpatterns = [
         "api/events/<uuid:event_id>/status/",
         events.update_event_status,
         name="event-status",
+    ),
+    path(
+        "api/events/<uuid:event_id>/update/",
+        events.update_event,
+        name="event-update",
     ),
 
     # Watchlist APIs

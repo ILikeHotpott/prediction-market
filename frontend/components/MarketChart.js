@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback } from "react"
 import { createChart, ColorType, LineSeries, LineType } from "lightweight-charts"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -29,6 +30,7 @@ export default function MarketChart({
   market,
   eventId,
   eventTitle,
+  coverUrl,
   eventType = "standalone",
   markets = [],
   hideOutcomes = false,
@@ -40,10 +42,12 @@ export default function MarketChart({
   const [interval, setIntervalState] = useState("1H")
   const [seriesData, setSeriesData] = useState({})
   const [loading, setLoading] = useState(false)
+  const [tooltips, setTooltips] = useState([])
   const pollRef = useRef(null)
   const chartContainerRef = useRef(null)
   const chartRef = useRef(null)
   const seriesRef = useRef([])
+  const chartDataRef = useRef([])
 
   const isMultiLine = eventType === "exclusive" || eventType === "independent"
   const effectiveEventId = eventId || market?.event_id
@@ -94,8 +98,8 @@ export default function MarketChart({
     }
   }, [effectiveEventId, interval, fetchSeriesData])
 
-  // Build chart data
-  const chartData = useMemo(() => {
+  // Build chart data - sorted by probability, top 4 for chart
+  const { chartData, sortedMarkets } = useMemo(() => {
     const processPoints = (points, currentProb) => {
       if (!points.length) {
         if (currentProb != null) {
@@ -114,7 +118,14 @@ export default function MarketChart({
     }
 
     if (isMultiLine && markets.length > 0) {
-      return markets.map((m, idx) => {
+      // Sort markets by probability (high to low)
+      const sorted = [...markets].sort((a, b) => {
+        const aProb = (a.options || []).find((o) => o.side === "yes")?.probability_bps || 0
+        const bProb = (b.options || []).find((o) => o.side === "yes")?.probability_bps || 0
+        return bProb - aProb
+      })
+
+      const allData = sorted.map((m, idx) => {
         const yesOption = (m.options || []).find((o) => o.side === "yes") || m.options?.[0]
         const optionId = yesOption?.id?.toString()
         const rawPoints = seriesData[optionId] || []
@@ -130,21 +141,27 @@ export default function MarketChart({
           option: yesOption,
         }
       })
+
+      // Only show top 4 in chart
+      return { chartData: allData.slice(0, 4), sortedMarkets: sorted }
     } else {
       const yesOption = (market?.options || []).find((o) => o.side === "yes") || market?.options?.[0]
       const optionId = yesOption?.id?.toString()
       const rawPoints = seriesData[optionId] || []
       const currentProb = yesOption?.probability_bps ? yesOption.probability_bps / 100 : null
       const points = processPoints(rawPoints, currentProb)
-      return [{
-        id: market?.id,
-        optionId,
-        label: "Yes",
-        color: COLORS[0],
-        points,
-        currentProb,
-        option: yesOption,
-      }]
+      return {
+        chartData: [{
+          id: market?.id,
+          optionId,
+          label: "Yes",
+          color: COLORS[0],
+          points,
+          currentProb,
+          option: yesOption,
+        }],
+        sortedMarkets: markets,
+      }
     }
   }, [market, markets, seriesData, isMultiLine])
 
@@ -160,6 +177,34 @@ export default function MarketChart({
   // Initialize and update TradingView Lightweight Chart
   useEffect(() => {
     if (!chartContainerRef.current) return
+
+    // Configure time scale based on interval
+    const getTimeScaleOptions = () => {
+      const base = { borderColor: "#e6ddcb", fixLeftEdge: true, fixRightEdge: true }
+      if (interval === "1M") {
+        return { ...base, timeVisible: true, secondsVisible: true, tickMarkFormatter: (time) => {
+          const d = new Date(time * 1000)
+          return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`
+        }}
+      } else if (interval === "1H" || interval === "4H") {
+        return { ...base, timeVisible: true, secondsVisible: false, tickMarkFormatter: (time) => {
+          const d = new Date(time * 1000)
+          return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+        }}
+      } else if (interval === "1D") {
+        return { ...base, timeVisible: true, secondsVisible: false, tickMarkFormatter: (time) => {
+          const d = new Date(time * 1000)
+          return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+        }}
+      } else {
+        // 1W, ALL - show month/day like "Jan 12"
+        const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        return { ...base, timeVisible: false, secondsVisible: false, tickMarkFormatter: (time) => {
+          const d = new Date(time * 1000)
+          return `${MONTHS[d.getMonth()]} ${d.getDate()}`
+        }}
+      }
+    }
 
     // Create chart
     const chart = createChart(chartContainerRef.current, {
@@ -178,19 +223,46 @@ export default function MarketChart({
         borderColor: "#e6ddcb",
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
-      timeScale: {
-        borderColor: "#e6ddcb",
-        timeVisible: true,
-        secondsVisible: interval === "1M",
-      },
+      timeScale: getTimeScaleOptions(),
       crosshair: {
         mode: 1,
         vertLine: { color: "#4b6ea9", width: 1, style: 2 },
         horzLine: { color: "#4b6ea9", width: 1, style: 2 },
       },
+      handleScroll: { mouseWheel: false, pressedMouseMove: true },
+      handleScale: { mouseWheel: false, pinch: false },
     })
 
     chartRef.current = chart
+
+    // Handle crosshair move for tooltips
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.point || !param.seriesData.size) {
+        setTooltips([])
+        return
+      }
+      const newTooltips = []
+      const containerRect = chartContainerRef.current?.getBoundingClientRect()
+      if (!containerRect) return
+
+      seriesRef.current.forEach((series, idx) => {
+        const data = param.seriesData.get(series)
+        if (data && chartDataRef.current[idx]) {
+          const lineInfo = chartDataRef.current[idx]
+          const coordinate = series.priceToCoordinate(data.value)
+          if (coordinate !== null) {
+            newTooltips.push({
+              label: lineInfo.label,
+              value: data.value,
+              color: lineInfo.color,
+              x: param.point.x,
+              y: coordinate,
+            })
+          }
+        }
+      })
+      setTooltips(newTooltips)
+    })
 
     // Handle resize
     const handleResize = () => {
@@ -211,6 +283,9 @@ export default function MarketChart({
   // Update series data
   useEffect(() => {
     if (!chartRef.current) return
+
+    // Update chartDataRef for tooltip access
+    chartDataRef.current = chartData
 
     // Remove old series
     seriesRef.current.forEach((s) => {
@@ -243,7 +318,16 @@ export default function MarketChart({
       {/* Header */}
       <div className="px-6 pt-5 pb-4">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xl font-bold text-slate-900">{eventTitle || market?.title}</h2>
+          <div className="flex items-center gap-3">
+            {coverUrl && (
+              <img
+                src={coverUrl}
+                alt=""
+                className="w-18 h-18 rounded-md object-cover flex-shrink-0"
+              />
+            )}
+            <h2 className="text-2xl font-bold text-slate-900">{eventTitle || market?.title}</h2>
+          </div>
           <div className="flex items-center gap-3 text-sm text-slate-500">
             {market?.resolution_deadline && (
               <span className="flex items-center gap-1">
@@ -290,11 +374,26 @@ export default function MarketChart({
       {/* Chart */}
       <div className="relative px-2">
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#f9f6ee]/80 z-10">
-            <div className="text-slate-500">Loading...</div>
+          <div className="absolute inset-0 bg-[#f9f6ee]/80 z-10 p-4">
+            <Skeleton className="w-full h-full rounded-lg" />
           </div>
         )}
         <div ref={chartContainerRef} />
+        {/* Tooltips */}
+        {tooltips.map((tip, idx) => (
+          <div
+            key={idx}
+            className="absolute pointer-events-none px-2 py-1 rounded text-sm font-medium text-white whitespace-nowrap z-20"
+            style={{
+              backgroundColor: tip.color,
+              left: tip.x + 12,
+              top: tip.y - 12,
+              transform: "translateY(-50%)",
+            }}
+          >
+            {tip.label} {tip.value.toFixed(1)}%
+          </div>
+        ))}
       </div>
 
       {/* Interval selector */}
@@ -317,7 +416,7 @@ export default function MarketChart({
       </div>
 
       {/* Outcome Table */}
-      {!hideOutcomes && isMultiLine && markets.length > 0 && (
+      {!hideOutcomes && isMultiLine && sortedMarkets.length > 0 && (
         <div className="border-t border-[#e6ddcb] px-6 py-4">
           <div className="flex items-center justify-between mb-3 text-xs text-slate-500 uppercase tracking-wider">
             <span>Outcome</span>
@@ -325,7 +424,7 @@ export default function MarketChart({
           </div>
 
           <div className="space-y-2">
-            {markets.map((m, idx) => {
+            {sortedMarkets.map((m, idx) => {
               const yesOption = (m.options || []).find((o) => o.side === "yes") || m.options?.[0]
               const probability = yesOption?.probability_bps != null ? Math.round(yesOption.probability_bps / 100) : 0
               const yesPrice = yesOption?.probability_bps != null ? `${(yesOption.probability_bps / 100).toFixed(1)}¢` : "—"
@@ -333,22 +432,28 @@ export default function MarketChart({
               const isSelected = normalizeId(m.id) === normalizeId(selectedOptionId)
               const yesActive = isSelected && selectedAction === "yes"
               const noActive = isSelected && selectedAction === "no"
+              // Only show color dot for top 4 (those in chart)
+              const showColor = idx < 4
 
               return (
                 <div key={m.id} className="flex items-center justify-between py-2 border-b border-[#e6ddcb] last:border-0">
                   <div className="flex items-center gap-3">
-                    <div
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-                    />
-                    <span className="text-slate-800 font-medium">{m.bucket_label || m.title}</span>
+                    {showColor ? (
+                      <div
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: COLORS[idx % COLORS.length] }}
+                      />
+                    ) : (
+                      <div className="w-2.5 h-2.5" />
+                    )}
+                    <span className="text-slate-800 font-medium text-lg">{m.bucket_label || m.title}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-slate-800 font-semibold text-lg w-14 text-right">{probability}%</span>
+                    <span className="text-slate-800 font-semibold text-xl w-16 text-right">{probability}%</span>
                     <div className="flex gap-2">
                       <button
                         onClick={() => onSelectMarket?.(m, "yes")}
-                        className={`w-24 py-1.5 text-sm font-medium rounded transition-colors ${
+                        className={`w-28 py-2 text-base font-medium rounded-lg transition-colors ${
                           yesActive
                             ? "bg-emerald-700 text-white"
                             : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
@@ -358,7 +463,7 @@ export default function MarketChart({
                       </button>
                       <button
                         onClick={() => onSelectMarket?.(m, "no")}
-                        className={`w-24 py-1.5 text-sm font-medium rounded transition-colors ${
+                        className={`w-28 py-2 text-base font-medium rounded-lg transition-colors ${
                           noActive
                             ? "bg-red-700 text-white"
                             : "bg-red-100 text-red-700 hover:bg-red-200"

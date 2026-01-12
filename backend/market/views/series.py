@@ -7,14 +7,31 @@ from django.views.decorators.http import require_http_methods
 from ..models import MarketOptionSeries, MarketOption
 
 
-INTERVAL_HOURS = {
-    "1M": 1/60,
-    "1H": 1,
-    "4H": 4,
-    "1D": 24,
-    "1W": 168,
-    "ALL": None,
+# Time range in hours and bucket size in seconds for each interval
+# All intervals use same bucket size (60s) for consistent trend detail
+INTERVAL_CONFIG = {
+    "1M": {"hours": 1/60, "bucket_seconds": 5},      # 1 min range, 5s buckets
+    "1H": {"hours": 1, "bucket_seconds": 60},        # 1 hour range, 1min buckets
+    "4H": {"hours": 4, "bucket_seconds": 60},        # 4 hour range, 1min buckets
+    "1D": {"hours": 24, "bucket_seconds": 60},       # 1 day range, 1min buckets
+    "1W": {"hours": 168, "bucket_seconds": 60},      # 1 week range, 1min buckets
+    "ALL": {"hours": None, "bucket_seconds": 60},    # All time, 1min buckets
 }
+
+
+def _aggregate_to_buckets(points, bucket_seconds):
+    """Aggregate raw points into larger time buckets, taking the last value in each bucket."""
+    if not points or bucket_seconds <= 5:
+        return points
+
+    buckets = {}
+    for p in points:
+        bucket_ts = (p["timestamp"] // bucket_seconds) * bucket_seconds
+        # Keep the latest value in each bucket
+        if bucket_ts not in buckets or p["timestamp"] > buckets[bucket_ts]["timestamp"]:
+            buckets[bucket_ts] = p
+
+    return sorted(buckets.values(), key=lambda x: x["timestamp"])
 
 
 @require_http_methods(["GET", "OPTIONS"])
@@ -24,7 +41,7 @@ def get_series(request):
 
     Query params:
       - market_ids: one or more market UUIDs
-      - interval: 1H, 6H, 1D, 1W, ALL (default: ALL)
+      - interval: 1M, 1H, 4H, 1D, 1W, ALL (default: ALL)
 
     Returns:
       {
@@ -45,8 +62,9 @@ def get_series(request):
     if not market_ids:
         return JsonResponse({"error": "market_ids required"}, status=400)
 
-    # Get time range
-    hours = INTERVAL_HOURS.get(interval)
+    config = INTERVAL_CONFIG.get(interval, INTERVAL_CONFIG["ALL"])
+    hours = config["hours"]
+    bucket_seconds = config["bucket_seconds"]
     now = timezone.now()
 
     # Get all Yes options for the markets
@@ -65,16 +83,23 @@ def get_series(request):
 
     qs = qs.order_by("option_id", "bucket_start")
 
-    # Group by option_id
-    series = {}
+    # Group by option_id and collect raw points
+    raw_series = {}
     for row in qs:
         opt_id = str(row.option_id)
-        if opt_id not in series:
-            series[opt_id] = []
-        series[opt_id].append({
+        if opt_id not in raw_series:
+            raw_series[opt_id] = []
+        raw_series[opt_id].append({
+            "timestamp": int(row.bucket_start.timestamp()),
             "bucket_start": row.bucket_start.isoformat(),
             "value_bps": row.value_bps,
         })
+
+    # Aggregate to appropriate bucket size
+    series = {}
+    for opt_id, points in raw_series.items():
+        aggregated = _aggregate_to_buckets(points, bucket_seconds)
+        series[opt_id] = [{"bucket_start": p["bucket_start"], "value_bps": p["value_bps"]} for p in aggregated]
 
     # If no historical data, add current prices as single points
     if not any(series.values()):

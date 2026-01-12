@@ -1,4 +1,5 @@
 from decimal import Decimal, InvalidOperation
+import logging
 from typing import Dict, List, Optional, Tuple
 
 from django.db import IntegrityError, transaction
@@ -23,6 +24,9 @@ from .quote_core import quote_from_state
 from .state import PoolState
 from .lmsr import prices
 from .money import _bps_from_probabilities
+from .pool_utils import build_no_to_yes_mapping
+
+logger = logging.getLogger(__name__)
 
 Number = Decimal
 
@@ -62,16 +66,15 @@ def _lock_pool_state(market_id: str) -> Tuple[AmmPool, List[AmmPoolOptionState],
     """
     Lock pool + option_state rows for a market and build PoolState.
     IMPORTANT: Must lock *all* option_state rows to prevent concurrent q drift.
-    
+
     For exclusive events, the pool is at the event level, not market level.
     Also builds the no_to_yes_option_id mapping for exclusive events.
     """
     # Try market-level pool first (no select_related to avoid outer join with FOR UPDATE)
     pool = AmmPool.objects.select_for_update().filter(market_id=market_id).first()
-    
+
     is_exclusive = False
-    event = None
-    
+
     # If no market-level pool, check for event-level pool (exclusive events)
     if pool is None:
         try:
@@ -83,7 +86,7 @@ def _lock_pool_state(market_id: str) -> Tuple[AmmPool, List[AmmPoolOptionState],
                     is_exclusive = (event.group_rule or "").strip().lower() == "exclusive"
         except Market.DoesNotExist:
             pass
-    
+
     if pool is None:
         raise ExecutionError("AMM pool not found for market", code="POOL_NOT_FOUND", http_status=404)
 
@@ -108,29 +111,9 @@ def _lock_pool_state(market_id: str) -> Tuple[AmmPool, List[AmmPoolOptionState],
         q.append(float(s.q))
 
     option_id_to_idx = {oid: i for i, oid in enumerate(option_ids)}
-    
-    # Build no_to_yes_option_id mapping for exclusive events
-    no_to_yes_option_id: Dict[str, Tuple[str, int]] = {}
-    if is_exclusive:
-        # For each Yes option in the pool, find its No counterpart
-        yes_option_ids = [int(oid) for oid in option_ids]
-        # Get all options (Yes and No) for the markets that have Yes options in the pool
-        yes_options = MarketOption.objects.filter(id__in=yes_option_ids).values_list("id", "market_id")
-        yes_market_ids = [m_id for _, m_id in yes_options]
-        yes_opt_by_market = {m_id: opt_id for opt_id, m_id in yes_options}
-        
-        # Find No counterparts (side='no' in the same markets)
-        no_options = list(
-            MarketOption.objects.filter(market_id__in=yes_market_ids, side="no", is_active=True)
-            .values_list("id", "market_id")
-        )
-        for no_opt_id, m_id in no_options:
-            yes_opt_id = yes_opt_by_market.get(m_id)
-            if yes_opt_id is not None:
-                yes_opt_str = str(yes_opt_id)
-                if yes_opt_str in option_id_to_idx:
-                    pool_idx = option_id_to_idx[yes_opt_str]
-                    no_to_yes_option_id[str(no_opt_id)] = (yes_opt_str, pool_idx)
+
+    # Build no_to_yes_option_id mapping for exclusive events (optimized single query)
+    no_to_yes_option_id = build_no_to_yes_mapping(option_ids, option_id_to_idx) if is_exclusive else {}
 
     state = PoolState(
         market_id=str(market_id),  # Use the passed market_id, not pool.market_id (which is None for event pools)
@@ -158,10 +141,10 @@ def _lock_market_and_option(market_id: str, option_id: Optional[str], option_ind
     except Market.DoesNotExist:
         raise ExecutionError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
 
-    # Fetch event separately if it exists
+    # FIX: Lock Event row when checking status to prevent race condition
     event = None
     if market.event_id:
-        event = Event.objects.filter(pk=market.event_id).first()
+        event = Event.objects.select_for_update().filter(pk=market.event_id).first()
     if event and (event.status != "active" or event.is_hidden):
         raise ExecutionError("Event is not active", code="EVENT_NOT_ACTIVE", http_status=400)
     if market.status != "active" or market.is_hidden:
@@ -352,7 +335,8 @@ def _recompute_option_probs(option_states: List[AmmPoolOptionState], b: float, n
         q = [float(getattr(st, "q", 0)) for st in option_states]
         probs = prices(q, float(b))
         prob_bps = _bps_from_probabilities(probs)
-    except Exception:
+    except Exception as e:
+        logger.warning("Failed to compute option probabilities: %s", e)
         return
 
     _update_option_probs(option_states, prob_bps, now)
@@ -410,8 +394,9 @@ def _record_price_series(option_states: List[AmmPoolOptionState], prob_bps: List
                 unique_fields=["option_id", "interval", "bucket_start"],
                 update_fields=["value_bps"],
             )
-    except Exception:
-        pass  # Best-effort, don't fail the trade
+    except Exception as e:
+        logger.warning("Failed to record price series: %s", e)
+        # Best-effort, don't fail the trade
 
 
 def execute_buy(
@@ -459,7 +444,20 @@ def execute_buy(
         if target_option_id in pool_state.no_to_yes_option_id:
             is_no_side = True
             # Map to the Yes option for LSMR calculation
-            yes_opt_id, _ = pool_state.no_to_yes_option_id[target_option_id]
+            yes_opt_id, mapped_idx = pool_state.no_to_yes_option_id[target_option_id]
+            # FIX: Validate mapping consistency
+            if yes_opt_id not in pool_state.option_id_to_idx:
+                raise ExecutionError(
+                    "Exclusive event mapping corrupted: Yes option not in pool",
+                    code="POOL_MAPPING_ERROR",
+                    http_status=422,
+                )
+            if pool_state.option_id_to_idx[yes_opt_id] != mapped_idx:
+                raise ExecutionError(
+                    "Exclusive event mapping corrupted: index mismatch",
+                    code="POOL_MAPPING_ERROR",
+                    http_status=422,
+                )
             # Use the Yes option_id for the quote, but keep original option for position tracking
             quote_option_id = yes_opt_id
         else:
@@ -546,26 +544,32 @@ def execute_buy(
                     http_status=400,
                 )
 
-        # Apply balance and position
-        balance.available_amount = Decimal(balance.available_amount) - amt
-        balance.updated_at = now
-        balance.save(update_fields=["available_amount", "updated_at"])
+        # Apply balance and position - FIX: use F() for atomic balance update
+        BalanceSnapshot.objects.filter(pk=balance.pk).update(
+            available_amount=F("available_amount") - amt,
+            updated_at=now,
+        )
+        # Refresh balance for return value
+        balance.refresh_from_db()
 
         position.shares = Decimal(position.shares) + shares_out
         position.cost_basis = Decimal(position.cost_basis) + amt
         position.updated_at = now
         position.save(update_fields=["shares", "cost_basis", "updated_at"])
 
-        # Update AMM state q
+        # Update AMM state q - FIX: use bulk_update to prevent race condition
         if is_no_side and quote.get("no_buy_deltas"):
             # For No-side buy, update all options based on deltas
             no_buy_deltas = quote["no_buy_deltas"]
+            states_to_update = []
             for idx, delta in enumerate(no_buy_deltas):
                 if delta > 0:
                     state_obj = option_states[idx]
                     state_obj.q = Decimal(state_obj.q) + Decimal(str(delta))
                     state_obj.updated_at = now
-                    state_obj.save(update_fields=["q", "updated_at"])
+                    states_to_update.append(state_obj)
+            if states_to_update:
+                AmmPoolOptionState.objects.bulk_update(states_to_update, ["q", "updated_at"])
         else:
             # Standard buy: only target outcome changes
             target_state = option_states[target_idx]
@@ -680,6 +684,19 @@ def execute_sell(
         if target_option_id in pool_state.no_to_yes_option_id:
             is_no_side = True
             yes_opt_id, target_idx = pool_state.no_to_yes_option_id[target_option_id]
+            # FIX: Validate mapping consistency
+            if yes_opt_id not in pool_state.option_id_to_idx:
+                raise ExecutionError(
+                    "Exclusive event mapping corrupted: Yes option not in pool",
+                    code="POOL_MAPPING_ERROR",
+                    http_status=422,
+                )
+            if pool_state.option_id_to_idx[yes_opt_id] != target_idx:
+                raise ExecutionError(
+                    "Exclusive event mapping corrupted: index mismatch",
+                    code="POOL_MAPPING_ERROR",
+                    http_status=422,
+                )
             quote_option_id = yes_opt_id
         else:
             quote_option_id = option_id
@@ -776,16 +793,19 @@ def execute_sell(
         position.updated_at = now
         position.save(update_fields=["shares", "cost_basis", "updated_at"])
 
-        # Update AMM state q
+        # Update AMM state q - FIX: use bulk_update to prevent race condition
         if is_no_side and quote.get("no_sell_deltas"):
             # For No-side sell, update all options based on deltas
             no_sell_deltas = quote["no_sell_deltas"]
+            states_to_update = []
             for idx, delta in enumerate(no_sell_deltas):
                 if delta != 0:
                     state_obj = option_states[idx]
                     state_obj.q = Decimal(state_obj.q) + Decimal(str(delta))
                     state_obj.updated_at = now
-                    state_obj.save(update_fields=["q", "updated_at"])
+                    states_to_update.append(state_obj)
+            if states_to_update:
+                AmmPoolOptionState.objects.bulk_update(states_to_update, ["q", "updated_at"])
         else:
             # Standard sell: only target outcome changes
             target_state = option_states[target_idx]
@@ -796,10 +816,13 @@ def execute_sell(
         # Update probabilities (cache)
         _recompute_option_probs(option_states, pool_state.b, now, is_exclusive=pool_state.is_exclusive)
 
-        # Balance credit (we already hold the row lock)
-        balance.available_amount = Decimal(balance.available_amount) + amount_out
-        balance.updated_at = now
-        balance.save(update_fields=["available_amount", "updated_at"])
+        # Balance credit - FIX: use F() for atomic balance update
+        BalanceSnapshot.objects.filter(pk=balance.pk).update(
+            available_amount=F("available_amount") + amount_out,
+            updated_at=now,
+        )
+        # Refresh balance for return value
+        balance.refresh_from_db()
 
         wallet = _ensure_wallet(user, wallet_id, now)
 

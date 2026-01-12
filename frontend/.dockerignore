@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.git/
+.gitignore
+.env
+.env.*
+!.env.production.example
+*.log
+npm-debug.log*
+.DS_Store
+coverage/
+.nyc_output/

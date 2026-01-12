@@ -99,7 +99,7 @@ export default function Navigation() {
                     <div className="text-left">
                       <div className="text-[13px] text-muted-foreground leading-tight font-bold">PORTFOLIO</div>
                       {navLoading ? (
-                        <Skeleton className="h-5 w-24 bg-white/15" />
+                        <Skeleton className="h-5 w-24" style={{ background: 'rgba(255,255,255,0.15)' }} />
                       ) : (
                         <div className="text-lg font-bold text-[#F4F6FA] leading-tight font-display tracking-wide">
                           {fmt(navPortfolio)}
@@ -109,7 +109,7 @@ export default function Navigation() {
                     <div className="text-left">
                       <div className="text-[13px] text-muted-foreground leading-tight font-bold">CASH</div>
                       {navLoading ? (
-                        <Skeleton className="h-5 w-20 bg-white/15" />
+                        <Skeleton className="h-5 w-20" style={{ background: 'rgba(255,255,255,0.15)' }} />
                       ) : (
                         <div className="text-lg font-bold text-[#F4F6FA] leading-tight font-display tracking-wide">
                           {fmt(navCash)}
@@ -245,14 +245,14 @@ export default function Navigation() {
                       <div className="p-3 rounded-lg bg-white/5 border border-white/10">
                         <div className="text-xs text-muted-foreground font-bold uppercase">Portfolio</div>
                         {navLoading ? (
-                          <Skeleton className="h-5 w-24 bg-white/15" />
+                          <Skeleton className="h-5 w-24" style={{ background: 'rgba(255,255,255,0.15)' }} />
                         ) : (
                           <div className="text-lg font-semibold text-secondary font-display">{fmt(navPortfolio)}</div>
                         )}
                         <div className="text-xs text-muted-foreground font-bold uppercase">
                           Cash{" "}
                           {navLoading ? (
-                            <Skeleton className="h-4 w-20 inline-block align-middle bg-white/15" />
+                            <Skeleton className="h-4 w-20 inline-block align-middle" style={{ background: 'rgba(255,255,255,0.15)' }} />
                           ) : (
                             fmt(navCash)
                           )}

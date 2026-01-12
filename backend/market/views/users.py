@@ -56,9 +56,15 @@ def sync_user(request):
     )
 
     if not created:
-        update_fields = ["display_name", "avatar_url", "updated_at"]
-        user.display_name = defaults["display_name"]
-        user.avatar_url = defaults["avatar_url"]
+        # Only update fields that are empty in the database
+        # This preserves user-modified values (from profile page)
+        update_fields = ["updated_at"]
+        if not user.display_name and defaults["display_name"]:
+            user.display_name = defaults["display_name"]
+            update_fields.append("display_name")
+        if not user.avatar_url and defaults["avatar_url"]:
+            user.avatar_url = defaults["avatar_url"]
+            update_fields.append("avatar_url")
         user.updated_at = now
         if payload_role:
             user.role = payload_role
@@ -363,12 +369,31 @@ def portfolio(request):
     balance = BalanceSnapshot.objects.filter(user=user, token=token).first()
     available = balance.available_amount if balance else Decimal(0)
 
+    # Active positions (excluding resolved/canceled markets)
     positions = list(
         Position.objects.select_related("market", "market__event", "option", "option__stats")
         .filter(user=user, shares__gt=0)
         .exclude(market__status__in=["resolved", "canceled"])
         .order_by("-updated_at")
     )
+
+    # Settled positions (resolved markets) for realized P&L
+    settled_positions = list(
+        Position.objects.select_related("market", "option")
+        .filter(user=user, market__status="resolved")
+    ) if include_pnl else []
+
+    # Calculate realized P&L from settled markets
+    realized_pnl = Decimal(0)
+    for sp in settled_positions:
+        winning_idx = sp.market.resolved_option_index
+        if winning_idx is not None and sp.option.option_index == winning_idx:
+            # User held winning option: payout = shares * 1
+            payout = sp.shares
+        else:
+            # User held losing option: payout = 0
+            payout = Decimal(0)
+        realized_pnl += payout - sp.cost_basis
 
     # 只在需要时加载 pool states
     pool_states = _batch_load_pool_states(positions) if include_pnl else {}
@@ -437,8 +462,11 @@ def portfolio(request):
         "portfolio_value": str(total_value),
     }
     if include_pnl:
-        total_pnl = total_cash_out - total_cost_basis
+        unrealized_pnl = total_cash_out - total_cost_basis
+        total_pnl = unrealized_pnl + realized_pnl
         result["total_cash_out_value"] = str(total_cash_out)
+        result["unrealized_pnl"] = str(unrealized_pnl)
+        result["realized_pnl"] = str(realized_pnl)
         result["total_pnl"] = str(total_pnl)
 
     return JsonResponse(result, status=200)
@@ -461,29 +489,34 @@ def order_history(request):
     except (TypeError, ValueError):
         page_size = 10
     page_size = max(1, min(page_size, 100))
+
+    # Count totals first (fast)
+    intent_count = OrderIntent.objects.filter(user=user).count()
+    settled_count = Position.objects.filter(user=user, market__status="resolved").count()
+    total = intent_count + settled_count
     offset = (page - 1) * page_size
 
-    base_qs = (
-        OrderIntent.objects.select_related("market", "option")
-        .filter(user=user)
-        .order_by("-created_at")
-    )
-    total = base_qs.count()
-    intents = base_qs[offset : offset + page_size]
-    items = []
-    for intent in intents:
-        prob_bps = None
-        try:
-            stats = MarketOptionStats.objects.get(option=intent.option)
-            prob_bps = stats.prob_bps
-        except MarketOptionStats.DoesNotExist:
-            pass
-        price = Decimal(prob_bps) / Decimal(10000) if prob_bps is not None else None
-        items.append(
-            {
-                "id": intent.id,
+    # Optimize: only fetch what we need based on offset
+    all_items = []
+
+    # If offset is within intents range, fetch intents
+    if offset < intent_count:
+        intents_needed = min(page_size, intent_count - offset)
+        intents = list(
+            OrderIntent.objects.select_related("market", "market__event", "option", "option__stats")
+            .filter(user=user)
+            .order_by("-created_at")[offset:offset + intents_needed]
+        )
+        for intent in intents:
+            stats = getattr(intent.option, "stats", None) if intent.option else None
+            prob_bps = stats.prob_bps if stats else None
+            price = Decimal(prob_bps) / Decimal(10000) if prob_bps is not None else None
+            event_title = intent.market.event.title if intent.market and intent.market.event else None
+            all_items.append({
+                "id": f"order_{intent.id}",
                 "market_id": str(intent.market_id),
                 "market_title": intent.market.title if intent.market else None,
+                "event_title": event_title,
                 "option_id": intent.option_id,
                 "option_title": intent.option.title if intent.option else None,
                 "side": intent.side,
@@ -493,11 +526,43 @@ def order_history(request):
                 "probability_bps": prob_bps,
                 "price": str(price) if price is not None else None,
                 "created_at": intent.created_at.isoformat() if intent.created_at else None,
-            }
+            })
+
+    # If we need more items from settled positions
+    remaining = page_size - len(all_items)
+    if remaining > 0:
+        settled_offset = max(0, offset - intent_count)
+        settled_positions = list(
+            Position.objects.select_related("market", "market__event", "option")
+            .filter(user=user, market__status="resolved")
+            .order_by("-market__resolved_at")[settled_offset:settled_offset + remaining]
         )
+        for sp in settled_positions:
+            winning_idx = sp.market.resolved_option_index
+            is_winner = winning_idx is not None and sp.option.option_index == winning_idx
+            payout = sp.shares if is_winner else Decimal(0)
+            side = "claimed" if is_winner else "lost"
+            event_title = sp.market.event.title if sp.market and sp.market.event else None
+            resolved_at = sp.market.resolved_at or sp.market.updated_at
+            all_items.append({
+                "id": f"settle_{sp.id}",
+                "market_id": str(sp.market_id),
+                "market_title": sp.market.title if sp.market else None,
+                "event_title": event_title,
+                "option_id": sp.option_id,
+                "option_title": sp.option.title if sp.option else None,
+                "side": side,
+                "amount_in": str(payout),
+                "shares_out": str(sp.shares),
+                "cost_basis": str(sp.cost_basis),
+                "status": "resolved",
+                "probability_bps": 10000 if is_winner else 0,
+                "price": "1" if is_winner else "0",
+                "created_at": resolved_at.isoformat() if resolved_at else None,
+            })
 
     return JsonResponse(
-        {"items": items, "page": page, "page_size": page_size, "total": total},
+        {"items": all_items, "page": page, "page_size": page_size, "total": total},
         status=200,
     )
 
@@ -566,9 +631,30 @@ def pnl_history(request):
             else:
                 daily_realized_pnl[date_key] += amt
 
-    # 计算当前未实现收益
+    # 计算已结算市场的realized P&L (use values for speed)
+    settled_positions = Position.objects.filter(
+        user=user, market__status="resolved"
+    ).select_related("market", "option").only(
+        "shares", "cost_basis", "market__resolved_option_index",
+        "market__resolved_at", "market__updated_at", "option__option_index"
+    )
+    for sp in settled_positions:
+        winning_idx = sp.market.resolved_option_index
+        if winning_idx is not None and sp.option.option_index == winning_idx:
+            payout = sp.shares
+        else:
+            payout = Decimal(0)
+        settled_pnl = payout - sp.cost_basis
+        settled_date = (sp.market.resolved_at or sp.market.updated_at or now).date().isoformat()
+        daily_realized_pnl[settled_date] += settled_pnl
+
+    # 计算当前未实现收益 (only for active markets, use only() for speed)
     unrealized_pnl = Decimal(0)
-    positions = Position.objects.filter(user=user, shares__gt=0).select_related("option__stats")
+    positions = Position.objects.filter(
+        user=user, shares__gt=0
+    ).select_related("option__stats").exclude(
+        market__status__in=["resolved", "canceled"]
+    ).only("shares", "cost_basis", "option__stats__prob_bps")
     for pos in positions:
         stats = getattr(pos.option, "stats", None) if pos.option else None
         if stats and stats.prob_bps is not None:
