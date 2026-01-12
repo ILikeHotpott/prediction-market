@@ -30,12 +30,17 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-z0k&ac97v-zl=d(sk7k
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
 
-# Default to localhost for development, override via DJANGO_ALLOWED_HOSTS in production
-ALLOWED_HOSTS = (
-    os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
-    if os.getenv("DJANGO_ALLOWED_HOSTS")
-    else ["localhost", "127.0.0.1", "api.monofuture.com"]
-)
+# Default to common hosts; override via DJANGO_ALLOWED_HOSTS in production
+allowed_hosts_env = os.getenv("DJANGO_ALLOWED_HOSTS", "")
+DEFAULT_ALLOWED_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+    "api.monofuture.com",
+    "monofuture.com",
+    ".monofuture.com",  # allow subdomains
+]
+ALLOWED_HOSTS = allowed_hosts_env.split(",") if allowed_hosts_env else DEFAULT_ALLOWED_HOSTS
 
 
 # Application definition
