@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useMemo } from "react"
+import { Suspense, useEffect, useState, useMemo } from "react"
 import Navigation from "@/components/Navigation"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -68,7 +68,9 @@ export default function LeaderboardPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation />
+      <Suspense fallback={<div className="h-20" />}>
+        <Navigation />
+      </Suspense>
       <div className="max-w-[900px] mx-auto px-4 sm:px-6">
         {/* Header */}
         <div className="mb-6">

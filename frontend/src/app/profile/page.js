@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import Navigation from "@/components/Navigation"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { usePortfolio } from "@/components/PortfolioProvider"
@@ -108,7 +108,9 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <Suspense fallback={<div className="h-20" />}>
+          <Navigation />
+        </Suspense>
         <div className="max-w-[600px] mx-auto px-4 py-10 text-center">
           <p className="text-foreground mb-4">Please log in to view your profile</p>
           <Button onClick={() => openAuthModal("login")}>Log In</Button>
@@ -119,7 +121,9 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation />
+      <Suspense fallback={<div className="h-20" />}>
+        <Navigation />
+      </Suspense>
       <div className="max-w-[600px] mx-auto px-4 sm:px-6 py-8">
         <h1 className="text-3xl font-bold text-foreground mb-8">Profile Settings</h1>
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Navigation from "@/components/Navigation"
 import MarketCard from "@/components/MarketCard"
 import { useAuth } from "@/components/auth/AuthProvider"
@@ -79,7 +79,9 @@ export default function WatchlistPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation />
+      <Suspense fallback={<div className="h-20" />}>
+        <Navigation />
+      </Suspense>
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 pb-16">
         <h1 className="text-2xl font-bold text-foreground mb-6">My Watchlist</h1>
 

@@ -64,7 +64,9 @@ function SearchContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation />
+      <Suspense fallback={<div className="h-20" />}>
+        <Navigation />
+      </Suspense>
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
         <div className="flex items-center gap-2 mb-6">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import Navigation from "@/components/Navigation"
 import { useAuth } from "@/components/auth/AuthProvider"
@@ -375,7 +375,9 @@ export default function PortfolioPage() {
 
   return (
     <div className="min-h-screen bg-background text-slate-900">
-      <Navigation />
+      <Suspense fallback={<div className="h-20" />}>
+        <Navigation />
+      </Suspense>
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6">
         {!user && (
           <div className="text-center text-slate-800 py-10">

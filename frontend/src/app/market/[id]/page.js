@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useRef, useCallback } from "react"
+import { Suspense, useEffect, useMemo, useState, useRef, useCallback } from "react"
 import Navigation from "@/components/Navigation"
 import MarketChart from "@/components/MarketChart"
 import Comments from "@/components/Comments"
@@ -450,7 +450,9 @@ export default function MarketDetail({ params }) {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden lg:overflow-hidden" onWheel={handleWheel}>
-      <Navigation />
+      <Suspense fallback={<div className="h-20" />}>
+        <Navigation />
+      </Suspense>
       <Toast
         message={toastMessage}
         type={toastType}

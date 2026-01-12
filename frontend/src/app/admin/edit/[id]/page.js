@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { Suspense, useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Navigation from "@/components/Navigation"
 import { Button } from "@/components/ui/button"
@@ -164,7 +164,9 @@ export default function EditEventPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Navigation />
+        <Suspense fallback={<div className="h-20" />}>
+          <Navigation />
+        </Suspense>
         <div className="max-w-4xl mx-auto px-6 py-12">
           <div className="text-gray-600 text-lg">Loading...</div>
         </div>
@@ -175,7 +177,9 @@ export default function EditEventPage() {
   if (!event) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Navigation />
+        <Suspense fallback={<div className="h-20" />}>
+          <Navigation />
+        </Suspense>
         <div className="max-w-4xl mx-auto px-6 py-12">
           <div className="text-red-600 text-lg">{error || "Event not found"}</div>
         </div>
@@ -185,7 +189,9 @@ export default function EditEventPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navigation />
+      <Suspense fallback={<div className="h-20" />}>
+        <Navigation />
+      </Suspense>
       <div className="max-w-4xl mx-auto px-6 py-12">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Edit Event</h1>
