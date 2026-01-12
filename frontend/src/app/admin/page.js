@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import dynamic from "next/dynamic";
+import { Suspense, useEffect, useMemo, useState, useRef } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/AuthProvider";
@@ -367,7 +368,9 @@ export default function AdminMarketsPage() {
 
   return (
     <div className="min-h-screen bg-[#202b39] text-white">
-      <Navigation />
+      <Suspense fallback={<div className="h-20 bg-[#202b39]" />}>
+        <Navigation />
+      </Suspense>
       <main className="max-w-5xl mx-auto px-6 py-8">
         <header className="flex items-center justify-between mb-6">
           <div>
