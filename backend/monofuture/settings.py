@@ -34,7 +34,7 @@ DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
 ALLOWED_HOSTS = (
     os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",")
     if os.getenv("DJANGO_ALLOWED_HOSTS")
-    else ["localhost", "127.0.0.1"]
+    else ["localhost", "127.0.0.1", "api.monofuture.com"]
 )
 
 
