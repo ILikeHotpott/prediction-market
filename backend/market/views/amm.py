@@ -1,12 +1,12 @@
 import logging
 from django.http import JsonResponse
 from django.utils import timezone
-from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
 from ..models import Market, MarketOption
 from ..services.amm.errors import QuoteInputError, QuoteMathError, QuoteNotFoundError
 from ..services.amm.quote import quote as quote_service
+from ..services.cache import get_cached_quote, set_cached_quote
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,6 @@ def _validate_market_and_option(market_id, option_id, option_index):
     return market, option, None
 
 
-@never_cache
 @require_http_methods(["GET"])
 def quote(request, market_id):
     """
@@ -159,6 +158,14 @@ def quote(request, market_id):
     if validation_error:
         return validation_error
 
+    # Try cache first
+    cache_key_option = option_id or str(option_index)
+    cached = get_cached_quote(str(market_id), cache_key_option, side, amount_param or "", shares_param or "")
+    if cached is not None:
+        resp = JsonResponse(cached, status=200)
+        resp["Cache-Control"] = "private, max-age=10"
+        return resp
+
     # Call service
     try:
         data = quote_service(
@@ -179,6 +186,9 @@ def quote(request, market_id):
         logger.exception("Unexpected error in quote endpoint", extra={"market_id": str(market_id)})
         return JsonResponse({"error": "Internal server error", "code": "INTERNAL"}, status=500)
 
+    # Cache the result
+    set_cached_quote(str(market_id), cache_key_option, side, amount_param or "", shares_param or "", data)
+
     resp = JsonResponse(data, status=200)
-    resp["Cache-Control"] = "no-store"
+    resp["Cache-Control"] = "private, max-age=10"
     return resp

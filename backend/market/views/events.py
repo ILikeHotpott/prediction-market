@@ -15,6 +15,11 @@ from ..services.auth import get_user_from_request, require_admin
 from ..services.events import binary_options_from_payload
 from ..services.parsing import parse_iso_datetime
 from ..services.serializers import serialize_event
+from ..services.cache import (
+    get_cached_event_list, set_cached_event_list,
+    get_cached_event_detail, set_cached_event_detail,
+    invalidate_event_list, invalidate_event_detail, invalidate_on_event_change,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -331,12 +336,22 @@ def list_events(request):
     Lightweight listing for homepage cards (events with primary market snapshot).
     Supports ?category=xxx filter.
     """
-    # Use select_related for stats (OneToOne) instead of prefetch_related to avoid N+1
-    options_qs = MarketOption.objects.select_related("stats").order_by("option_index")
     is_admin = False
     user = get_user_from_request(request)
     if user and user.role == "admin":
         is_admin = True
+
+    category = request.GET.get("category")
+    ids_param = request.GET.get("ids")
+
+    # Try cache first (skip for admin to always show fresh data)
+    if not is_admin:
+        cached = get_cached_event_list(category, is_admin, ids_param)
+        if cached is not None:
+            return JsonResponse(cached, status=200)
+
+    # Use select_related for stats (OneToOne) instead of prefetch_related to avoid N+1
+    options_qs = MarketOption.objects.select_related("stats").order_by("option_index")
 
     markets_qs = Market.objects.order_by("sort_weight", "-created_at").prefetch_related(
         Prefetch("options", queryset=options_qs, to_attr="prefetched_options")
@@ -351,22 +366,36 @@ def list_events(request):
         events_qs = events_qs.filter(status="active", is_hidden=False)
 
     # Category filter
-    category = request.GET.get("category")
     if category:
         events_qs = events_qs.filter(category__iexact=category)
 
     # IDs filter (for watchlist)
-    ids_param = request.GET.get("ids")
     if ids_param:
         id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
         events_qs = events_qs.filter(id__in=id_list)
 
     items = [serialize_event(e) for e in events_qs[:100]]
-    return JsonResponse({"items": items}, status=200)
+    result = {"items": items}
+
+    # Cache the result (only for non-admin)
+    if not is_admin:
+        set_cached_event_list(category, is_admin, result, ids_param)
+
+    return JsonResponse(result, status=200)
 
 
 @require_http_methods(["GET"])
 def get_event(request, event_id):
+    # Try cache first
+    cached = get_cached_event_detail(str(event_id))
+    if cached is not None:
+        # Still need to check permissions for hidden events
+        if cached.get("status") != "active" or cached.get("is_hidden"):
+            user = get_user_from_request(request)
+            if not (user and user.role == "admin"):
+                return JsonResponse({"error": "Event not available"}, status=404)
+        return JsonResponse(cached, status=200)
+
     try:
         event = _prefetched_event(event_id)
     except Event.DoesNotExist:
@@ -377,7 +406,10 @@ def get_event(request, event_id):
         if not (user and user.role == "admin"):
             return JsonResponse({"error": "Event not available"}, status=404)
 
-    return JsonResponse(serialize_event(event), status=200)
+    result = serialize_event(event)
+    # Cache the result
+    set_cached_event_detail(str(event_id), result)
+    return JsonResponse(result, status=200)
 
 
 @csrf_exempt
@@ -476,6 +508,8 @@ def publish_event(request, event_id):
     event = _prefetched_event(event_id)
     event_data = serialize_event(event)
     _index_event_async(event_data)
+    # Invalidate caches
+    invalidate_on_event_change(str(event_id))
     return JsonResponse(event_data, status=200)
 
 
@@ -592,4 +626,6 @@ def update_event(request, event_id):
     event = _prefetched_event(event_id)
     event_data = serialize_event(event)
     _index_event_async(event_data)
+    # Invalidate caches
+    invalidate_on_event_change(str(event_id))
     return JsonResponse(event_data, status=200)

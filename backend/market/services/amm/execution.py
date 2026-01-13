@@ -25,6 +25,7 @@ from .state import PoolState
 from .lmsr import prices
 from .money import _bps_from_probabilities
 from .pool_utils import build_no_to_yes_mapping
+from ..cache import invalidate_on_trade
 
 logger = logging.getLogger(__name__)
 
@@ -622,6 +623,10 @@ def execute_buy(
         pool.updated_at = now
         pool.save(update_fields=["pool_cash", "updated_at"])
 
+        # Invalidate caches after successful trade
+        event_id = str(market.event_id) if market.event_id else None
+        invalidate_on_trade(str(market.id), str(user.id), event_id)
+
         return {
             "market_id": str(market.id),
             "option_id": option.id,
@@ -865,6 +870,10 @@ def execute_sell(
         pool.pool_cash = Decimal(pool.pool_cash) - amount_out
         pool.updated_at = now
         pool.save(update_fields=["pool_cash", "updated_at"])
+
+        # Invalidate caches after successful trade
+        event_id = str(market.event_id) if market.event_id else None
+        invalidate_on_trade(str(market.id), str(user.id), event_id)
 
         return {
             "market_id": str(market.id),

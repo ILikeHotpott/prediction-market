@@ -192,3 +192,33 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Cache configuration
+# Use Redis if REDIS_URL is set, otherwise use local memory cache
+if os.getenv("REDIS_URL"):
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": os.getenv("REDIS_URL"),
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            },
+            "KEY_PREFIX": "mf",
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",
+        }
+    }
+
+# Cache TTL settings (in seconds)
+CACHE_TTL_QUOTE = int(os.getenv("CACHE_TTL_QUOTE", "10"))  # Quote endpoint: 10s
+CACHE_TTL_POOL_STATE = int(os.getenv("CACHE_TTL_POOL_STATE", "30"))  # Pool state: 30s
+CACHE_TTL_EVENT_LIST = int(os.getenv("CACHE_TTL_EVENT_LIST", "60"))  # Event list: 60s
+CACHE_TTL_MARKET_DETAIL = int(os.getenv("CACHE_TTL_MARKET_DETAIL", "30"))  # Market detail: 30s
+CACHE_TTL_PORTFOLIO = int(os.getenv("CACHE_TTL_PORTFOLIO", "30"))  # Portfolio: 30s
+CACHE_TTL_ORDER_HISTORY = int(os.getenv("CACHE_TTL_ORDER_HISTORY", "60"))  # Order history: 60s
+CACHE_TTL_LEADERBOARD = int(os.getenv("CACHE_TTL_LEADERBOARD", "120"))  # Leaderboard: 120s

@@ -13,6 +13,11 @@ from ..services.amm.setup import AmmSetupError, ensure_pool_initialized, normali
 from ..services.auth import get_user_from_request, require_admin
 from ..services.parsing import parse_iso_datetime
 from ..services.serializers import serialize_market
+from ..services.cache import (
+    get_cached_market_list, set_cached_market_list,
+    get_cached_market_detail, set_cached_market_detail,
+    invalidate_market_list, invalidate_market_detail,
+)
 
 
 ALLOWED_MARKET_STATUSES = {
@@ -121,24 +126,45 @@ def _create_market_with_options(market_fields, parsed_options, amm_params):
 @require_http_methods(["GET"])
 def list_markets(request):
     """Lightweight listing to support admin UI without exposing everything."""
-    options_qs = MarketOption.objects.prefetch_related("stats").order_by("option_index")
-    markets_qs = Market.objects.order_by("-created_at").prefetch_related(
-        Prefetch("options", queryset=options_qs, to_attr="prefetched_options")
-    )
     is_admin = False
     user = get_user_from_request(request)
     if user and user.role == "admin":
         is_admin = True
+
+    # Try cache first (skip for admin)
+    if not is_admin:
+        cached = get_cached_market_list(is_admin)
+        if cached is not None:
+            return JsonResponse(cached, status=200)
+
+    options_qs = MarketOption.objects.prefetch_related("stats").order_by("option_index")
+    markets_qs = Market.objects.order_by("-created_at").prefetch_related(
+        Prefetch("options", queryset=options_qs, to_attr="prefetched_options")
+    )
     if not is_admin:
         markets_qs = markets_qs.filter(status="active", is_hidden=False)
-    return JsonResponse(
-        {"items": [serialize_market(m) for m in markets_qs[:100]]},
-        status=200,
-    )
+
+    result = {"items": [serialize_market(m) for m in markets_qs[:100]]}
+
+    # Cache the result (only for non-admin)
+    if not is_admin:
+        set_cached_market_list(is_admin, result)
+
+    return JsonResponse(result, status=200)
 
 
 @require_http_methods(["GET"])
 def get_market(request, market_id):
+    # Try cache first
+    cached = get_cached_market_detail(str(market_id))
+    if cached is not None:
+        # Still need to check permissions for hidden markets
+        if cached.get("status") != "active" or cached.get("is_hidden"):
+            user = get_user_from_request(request)
+            if not (user and user.role == "admin"):
+                return JsonResponse({"error": "Market not available"}, status=404)
+        return JsonResponse(cached, status=200)
+
     try:
         options_qs = MarketOption.objects.prefetch_related("stats").order_by("option_index")
         market = (
@@ -155,7 +181,10 @@ def get_market(request, market_id):
         if not (user and user.role == "admin"):
             return JsonResponse({"error": "Market not available"}, status=404)
 
-    return JsonResponse(serialize_market(market), status=200)
+    result = serialize_market(market)
+    # Cache the result
+    set_cached_market_detail(str(market_id), result)
+    return JsonResponse(result, status=200)
 
 
 @csrf_exempt

@@ -16,6 +16,11 @@ from ..services.amm.quote_core import quote_from_state
 from ..services.amm.state import PoolState
 from ..services.amm.errors import QuoteError
 from ..services.amm.money import _fee_rate_from_bps
+from ..services.cache import (
+    get_cached_portfolio, set_cached_portfolio,
+    get_cached_order_history, set_cached_order_history,
+    get_cached_leaderboard, set_cached_leaderboard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +371,11 @@ def portfolio(request):
     token = request.GET.get("token") or "USDC"
     include_pnl = request.GET.get("include_pnl", "true").lower() != "false"
 
+    # Try cache first
+    cached = get_cached_portfolio(str(user.id), token, include_pnl)
+    if cached is not None:
+        return JsonResponse(cached, status=200)
+
     balance = BalanceSnapshot.objects.filter(user=user, token=token).first()
     available = balance.available_amount if balance else Decimal(0)
 
@@ -469,6 +479,9 @@ def portfolio(request):
         result["realized_pnl"] = str(realized_pnl)
         result["total_pnl"] = str(total_pnl)
 
+    # Cache the result
+    set_cached_portfolio(str(user.id), token, include_pnl, result)
+
     return JsonResponse(result, status=200)
 
 
@@ -489,6 +502,11 @@ def order_history(request):
     except (TypeError, ValueError):
         page_size = 10
     page_size = max(1, min(page_size, 100))
+
+    # Try cache first
+    cached = get_cached_order_history(str(user.id), page, page_size)
+    if cached is not None:
+        return JsonResponse(cached, status=200)
 
     # Count totals first (fast)
     intent_count = OrderIntent.objects.filter(user=user).count()
@@ -561,10 +579,11 @@ def order_history(request):
                 "created_at": resolved_at.isoformat() if resolved_at else None,
             })
 
-    return JsonResponse(
-        {"items": all_items, "page": page, "page_size": page_size, "total": total},
-        status=200,
-    )
+    result = {"items": all_items, "page": page, "page_size": page_size, "total": total}
+    # Cache the result
+    set_cached_order_history(str(user.id), page, page_size, result)
+
+    return JsonResponse(result, status=200)
 
 
 @require_http_methods(["GET", "OPTIONS"])
@@ -632,7 +651,10 @@ def pnl_history(request):
                 daily_realized_pnl[date_key] += amt
 
     # 计算已结算市场的realized P&L (use values for speed)
+    # 只查询有持仓或有成本的记录，避免查询已全部卖出的无效记录
+    from django.db.models import Q
     settled_positions = Position.objects.filter(
+        Q(shares__gt=0) | Q(cost_basis__gt=0),
         user=user, market__status="resolved"
     ).select_related("market", "option").only(
         "shares", "cost_basis", "market__resolved_option_index",
@@ -715,6 +737,20 @@ def leaderboard(request):
     sort_by = request.GET.get("sort", "pnl")  # pnl or volume
     limit = min(int(request.GET.get("limit", 50)), 100)
 
+    # Try cache first (skip if search is provided as it's user-specific)
+    if not search:
+        cached = get_cached_leaderboard(period, category, sort_by, limit)
+        if cached is not None:
+            # Add current user data if authenticated
+            current_user = get_user_from_request(request)
+            if current_user:
+                current_user_id = str(current_user.id)
+                for item in cached.get("users", []):
+                    if item["user_id"] == current_user_id:
+                        cached["current_user"] = {**item, "is_current_user": True}
+                        break
+            return JsonResponse(cached, status=200)
+
     now = timezone.now()
     if period == "today":
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -747,9 +783,12 @@ def leaderboard(request):
     if not user_ids:
         return JsonResponse({"users": [], "current_user": None}, status=200)
 
-    # 计算已实现收益
+    # 计算已实现收益（需要与 volume 使用相同的 category 过滤）
+    pnl_trades_filter = {"user_id__in": user_ids}
+    if category:
+        pnl_trades_filter["market__event__category"] = category
     all_trades = list(
-        Trade.objects.filter(user_id__in=user_ids)
+        Trade.objects.filter(**pnl_trades_filter)
         .order_by("user_id", "block_time")
         .values("user_id", "option_id", "side", "amount_in", "shares", "block_time")
     )
@@ -866,11 +905,17 @@ def leaderboard(request):
     # 获取分类列表
     categories = list(Event.objects.exclude(category__isnull=True).exclude(category="").values_list("category", flat=True).distinct())
 
-    return JsonResponse({
+    result = {
         "users": leaderboard_data[:limit],
         "current_user": current_user_data,
         "categories": categories,
-    }, status=200)
+    }
+
+    # Cache the result (only if no search filter)
+    if not search:
+        set_cached_leaderboard(period, category, sort_by, limit, result)
+
+    return JsonResponse(result, status=200)
 
 
 ONBOARDING_BONUS_AMOUNT = Decimal("1000")

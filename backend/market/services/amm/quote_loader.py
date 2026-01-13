@@ -1,18 +1,62 @@
 import math
-from typing import List
+from typing import List, Optional
 
 from ...models import AmmPoolOptionState, MarketOption
 from .errors import QuoteMathError, QuoteNotFoundError
 from .money import _fee_rate_from_bps
 from .pool_utils import build_no_to_yes_mapping, load_pool_for_market
 from .state import PoolState
+from ..cache import get_cached_pool_state, set_cached_pool_state
 
 
-def load_pool_state(market_id) -> PoolState:
+def _pool_state_to_dict(state: PoolState) -> dict:
+    """Convert PoolState to a cacheable dict."""
+    return {
+        "market_id": state.market_id,
+        "pool_id": state.pool_id,
+        "b": state.b,
+        "fee_bps": state.fee_bps,
+        "option_ids": state.option_ids,
+        "option_indexes": state.option_indexes,
+        "q": state.q,
+        "option_id_to_idx": state.option_id_to_idx,
+        "option_index_to_idx": state.option_index_to_idx,
+        "no_to_yes_option_id": state.no_to_yes_option_id,
+        "is_exclusive": state.is_exclusive,
+    }
+
+
+def _dict_to_pool_state(d: dict) -> PoolState:
+    """Convert cached dict back to PoolState."""
+    return PoolState(
+        market_id=d["market_id"],
+        pool_id=d["pool_id"],
+        b=d["b"],
+        fee_bps=d["fee_bps"],
+        option_ids=d["option_ids"],
+        option_indexes=d["option_indexes"],
+        q=d["q"],
+        option_id_to_idx=d["option_id_to_idx"],
+        option_index_to_idx={int(k): v for k, v in d["option_index_to_idx"].items()},
+        no_to_yes_option_id=d["no_to_yes_option_id"],
+        is_exclusive=d["is_exclusive"],
+    )
+
+
+def load_pool_state(market_id, use_cache: bool = True) -> PoolState:
     """
     Read-only ORM fetch and normalize into PoolState.
     Supports both market-level pools and event-level pools (for exclusive events).
+    Uses cache when use_cache=True (default).
     """
+    market_id_str = str(market_id)
+
+    # Try cache first
+    if use_cache:
+        cached = get_cached_pool_state(market_id_str)
+        if cached is not None:
+            return _dict_to_pool_state(cached)
+
     pool, is_exclusive, _ = load_pool_for_market(market_id, for_update=False)
 
     if pool is None:
@@ -48,8 +92,8 @@ def load_pool_state(market_id) -> PoolState:
     # Build no_to_yes_option_id mapping for exclusive events (optimized single query)
     no_to_yes_option_id = build_no_to_yes_mapping(option_ids, option_id_to_idx) if is_exclusive else {}
 
-    return PoolState(
-        market_id=str(market_id),
+    state = PoolState(
+        market_id=market_id_str,
         pool_id=str(pool.id),
         b=b,
         fee_bps=fee_bps,
@@ -61,5 +105,11 @@ def load_pool_state(market_id) -> PoolState:
         no_to_yes_option_id=no_to_yes_option_id,
         is_exclusive=is_exclusive,
     )
+
+    # Cache the result
+    if use_cache:
+        set_cached_pool_state(market_id_str, _pool_state_to_dict(state))
+
+    return state
 
 
