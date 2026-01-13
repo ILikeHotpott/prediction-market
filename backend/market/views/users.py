@@ -590,9 +590,13 @@ def order_history(request):
 def pnl_history(request):
     """获取用户收益历史数据，用于绘制收益曲线
 
-    收益 = 已实现收益 + 未实现收益
-    - 已实现收益：卖出收入 - 卖出成本
-    - 未实现收益：当前持仓市值 - 持仓成本
+    PnL 定义：
+    - PnL = 当前持仓市值 - 持仓成本 + 已结算净收益
+    - 买入/卖出不改变 PnL（只是资产形态转换）
+    - 只有市场价格变化或结算才会改变 PnL
+
+    已实现收益：只有市场结算时才产生（payout - cost_basis）
+    未实现收益：当前持仓市值 - 持仓成本
     """
     if request.method == "OPTIONS":
         return JsonResponse({}, status=200)
@@ -602,7 +606,8 @@ def pnl_history(request):
 
     from datetime import timedelta
     from collections import defaultdict
-    from ..models import Trade, Position
+    from ..models import Position
+    from django.db.models import Q
 
     period = request.GET.get("period", "1m")
     now = timezone.now()
@@ -616,43 +621,10 @@ def pnl_history(request):
     else:  # all
         start_date = None
 
-    # 获取所有交易记录
-    all_trades = list(
-        Trade.objects.filter(user=user)
-        .order_by("block_time")
-        .values("block_time", "side", "amount_in", "shares", "option_id")
-    )
-
-    # 按 option 追踪成本基础
-    option_cost = defaultdict(lambda: {"total_cost": Decimal(0), "total_shares": Decimal(0)})
-
-    # 计算每笔交易的已实现收益
+    # 已实现收益：只计算已结算市场的 payout - cost_basis
+    # 买入/卖出不产生 realized PnL，只有结算才产生
     daily_realized_pnl = defaultdict(lambda: Decimal(0))
 
-    for t in all_trades:
-        opt_id = t["option_id"]
-        amt = Decimal(str(t["amount_in"] or 0))
-        shares = Decimal(str(t["shares"] or 0))
-        date_key = t["block_time"].date().isoformat()
-
-        if t["side"] == "buy":
-            option_cost[opt_id]["total_cost"] += amt
-            option_cost[opt_id]["total_shares"] += shares
-        else:  # sell
-            cost_data = option_cost[opt_id]
-            if cost_data["total_shares"] > 0:
-                avg_cost = cost_data["total_cost"] / cost_data["total_shares"]
-                cost_of_sold = shares * avg_cost
-                profit = amt - cost_of_sold
-                cost_data["total_cost"] -= cost_of_sold
-                cost_data["total_shares"] -= shares
-                daily_realized_pnl[date_key] += profit
-            else:
-                daily_realized_pnl[date_key] += amt
-
-    # 计算已结算市场的realized P&L (use values for speed)
-    # 只查询有持仓或有成本的记录，避免查询已全部卖出的无效记录
-    from django.db.models import Q
     settled_positions = Position.objects.filter(
         Q(shares__gt=0) | Q(cost_basis__gt=0),
         user=user, market__status="resolved"
@@ -670,7 +642,7 @@ def pnl_history(request):
         settled_date = (sp.market.resolved_at or sp.market.updated_at or now).date().isoformat()
         daily_realized_pnl[settled_date] += settled_pnl
 
-    # 计算当前未实现收益 (only for active markets, use only() for speed)
+    # 未实现收益：当前持仓市值 - 持仓成本（只针对活跃市场）
     unrealized_pnl = Decimal(0)
     positions = Position.objects.filter(
         user=user, shares__gt=0
@@ -684,7 +656,7 @@ def pnl_history(request):
             market_value = price * pos.shares
             unrealized_pnl += market_value - pos.cost_basis
 
-    # 生成数据点
+    # 生成数据点（只有结算事件才会产生历史数据点）
     data_points = []
     cumulative_realized = Decimal(0)
 
@@ -776,74 +748,45 @@ def leaderboard(request):
             volume_by_user[str(t["user_id"])] += Decimal(str(t["amount_in"] or 0))
 
     # 计算每个用户的 PnL（已实现 + 未实现）
-    pnl_by_user = {}
+    # 已实现收益：只有市场结算时才产生（payout - cost_basis）
+    # 买入/卖出不产生 realized PnL
+    pnl_by_user = defaultdict(lambda: Decimal(0))
 
     # 获取所有有交易的用户
     user_ids = list(volume_by_user.keys())
     if not user_ids:
         return JsonResponse({"users": [], "current_user": None}, status=200)
 
-    # 计算已实现收益（需要与 volume 使用相同的 category 过滤）
-    pnl_trades_filter = {"user_id__in": user_ids}
+    # 计算已实现收益：只来自已结算市场
+    from django.db.models import Q
+    position_filter = {"user_id__in": user_ids, "market__status": "resolved"}
     if category:
-        pnl_trades_filter["market__event__category"] = category
-    all_trades = list(
-        Trade.objects.filter(**pnl_trades_filter)
-        .order_by("user_id", "block_time")
-        .values("user_id", "option_id", "side", "amount_in", "shares", "block_time")
-    )
+        position_filter["market__event__category"] = category
+    if start_date:
+        position_filter["market__resolved_at__gte"] = start_date
 
-    # 按用户分组计算
-    user_trades = defaultdict(list)
-    for t in all_trades:
-        user_trades[str(t["user_id"])].append(t)
+    settled_positions = Position.objects.filter(
+        Q(shares__gt=0) | Q(cost_basis__gt=0),
+        **position_filter
+    ).select_related("market", "option")
 
-    for user_id, trades_list in user_trades.items():
-        option_cost = defaultdict(lambda: {"total_cost": Decimal(0), "total_shares": Decimal(0)})
-        realized_pnl = Decimal(0)
+    for sp in settled_positions:
+        user_id = str(sp.user_id)
+        winning_idx = sp.market.resolved_option_index
+        if winning_idx is not None and sp.option.option_index == winning_idx:
+            payout = Decimal(sp.shares)
+        else:
+            payout = Decimal(0)
+        realized_pnl = payout - Decimal(sp.cost_basis)
+        pnl_by_user[user_id] += realized_pnl
 
-        for t in trades_list:
-            # 如果有时间筛选，只计算该时间段内的已实现收益
-            if start_date and t["block_time"] < start_date:
-                # 更新成本基础但不计入收益
-                opt_id = t["option_id"]
-                amt = Decimal(str(t["amount_in"] or 0))
-                shares = Decimal(str(t["shares"] or 0))
-                if t["side"] == "buy":
-                    option_cost[opt_id]["total_cost"] += amt
-                    option_cost[opt_id]["total_shares"] += shares
-                else:
-                    cost_data = option_cost[opt_id]
-                    if cost_data["total_shares"] > 0:
-                        avg_cost = cost_data["total_cost"] / cost_data["total_shares"]
-                        cost_of_sold = shares * avg_cost
-                        cost_data["total_cost"] -= cost_of_sold
-                        cost_data["total_shares"] -= shares
-                continue
-
-            opt_id = t["option_id"]
-            amt = Decimal(str(t["amount_in"] or 0))
-            shares = Decimal(str(t["shares"] or 0))
-
-            if t["side"] == "buy":
-                option_cost[opt_id]["total_cost"] += amt
-                option_cost[opt_id]["total_shares"] += shares
-            else:
-                cost_data = option_cost[opt_id]
-                if cost_data["total_shares"] > 0:
-                    avg_cost = cost_data["total_cost"] / cost_data["total_shares"]
-                    cost_of_sold = shares * avg_cost
-                    profit = amt - cost_of_sold
-                    cost_data["total_cost"] -= cost_of_sold
-                    cost_data["total_shares"] -= shares
-                    realized_pnl += profit
-                else:
-                    realized_pnl += amt
-
-        pnl_by_user[user_id] = realized_pnl
-
-    # 计算未实现收益
-    positions = Position.objects.filter(user_id__in=user_ids, shares__gt=0).select_related("option__stats")
+    # 计算未实现收益：当前持仓市值 - 持仓成本
+    unrealized_filter = {"user_id__in": user_ids, "shares__gt": 0}
+    if category:
+        unrealized_filter["market__event__category"] = category
+    positions = Position.objects.filter(**unrealized_filter).exclude(
+        market__status__in=["resolved", "canceled"]
+    ).select_related("option__stats")
     for pos in positions:
         user_id = str(pos.user_id)
         stats = getattr(pos.option, "stats", None) if pos.option else None

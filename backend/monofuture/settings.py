@@ -200,10 +200,8 @@ if os.getenv("REDIS_URL"):
         "default": {
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
             "LOCATION": os.getenv("REDIS_URL"),
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            },
             "KEY_PREFIX": "mf",
+            # "TIMEOUT": 60,
         }
     }
 else:
@@ -213,6 +211,7 @@ else:
             "LOCATION": "unique-snowflake",
         }
     }
+
 
 # Cache TTL settings (in seconds)
 CACHE_TTL_QUOTE = int(os.getenv("CACHE_TTL_QUOTE", "10"))  # Quote endpoint: 10s
