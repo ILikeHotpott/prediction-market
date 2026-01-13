@@ -11,6 +11,15 @@ const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:800
 const CACHE_KEY_PREFIX = "mf_events_"
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+function formatVolume(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return "—"
+  if (num >= 1000000) return `$${(num / 1000000).toFixed(1)}M`
+  if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`
+  if (num > 0) return `$${num.toFixed(0)}`
+  return "$0"
+}
+
 // Global in-memory cache for instant access
 const memoryCache = new Map()
 
@@ -61,10 +70,14 @@ function prefetchAllCategories() {
 async function fetchEventsData(category) {
   const url = new URL(`${backendBase}/api/events/`)
   if (category) url.searchParams.set("category", category)
-  const res = await fetch(url.toString(), { cache: "no-store" })
-  const data = await res.json()
-  if (!res.ok) return null
-  return normalizeEvents(data.items || [])
+  try {
+    const res = await fetch(url.toString(), { cache: "no-store" })
+    const data = await res.json()
+    if (!res.ok) return []
+    return normalizeEvents(data.items || [])
+  } catch {
+    return []
+  }
 }
 
 function normalizeEvents(items) {
@@ -76,15 +89,17 @@ function normalizeEvents(items) {
       name: o.title,
       probability: o.probability ?? (o.probability_bps != null ? Math.round(o.probability_bps / 100) : 0),
     }))
-    const multiOutcomes = groupRule === "standalone" ? standaloneOutcomes : markets.map((m, idx) => {
+    const exclusiveOutcomes = markets.map((m, idx) => {
       const yesOption = (m.options || []).find((o) => String(o.title || "").trim().toLowerCase() === "yes")
       const prob = yesOption?.probability ?? (yesOption?.probability_bps != null ? Math.round(yesOption.probability_bps / 100) : 0)
       return { name: m.title || m.assertion_text || `Option ${idx + 1}`, probability: prob, market_id: m.id }
-    })
+    }).sort((a, b) => b.probability - a.probability)
+    const multiOutcomes = groupRule === "standalone" ? standaloneOutcomes : exclusiveOutcomes
     const outcomeNames = standaloneOutcomes.map((o) => String(o.name || "").toLowerCase())
     const isBinaryYesNo = outcomeNames.length === 2 && outcomeNames.includes("yes") && outcomeNames.includes("no")
     const yesOption = standaloneOutcomes.find((o) => String(o.name || "").toLowerCase() === "yes")
-    const totalVolume = groupRule === "standalone" ? primaryMarket?.volume_total : markets.reduce((sum, m) => sum + (Number(m.volume_total) || 0), 0) || "—"
+    const rawVolume = groupRule === "standalone" ? Number(primaryMarket?.volume_total) || 0 : markets.reduce((sum, m) => sum + (Number(m.volume_total) || 0), 0)
+    const totalVolume = formatVolume(rawVolume)
     return {
       id: evt.id, title: evt.title, description: evt.description, outcomes: multiOutcomes,
       is_binary: primaryMarket?.is_binary || isBinaryYesNo, chance: yesOption ? yesOption.probability : undefined,
@@ -135,10 +150,8 @@ export default function MarketGrid() {
     setMounted(true)
     // Start fetching immediately, don't wait for another effect cycle
     fetchEventsData(category).then((data) => {
-      if (data) {
-        setMarkets(data)
-        setCachedEvents(category, data)
-      }
+      setMarkets(data)
+      if (data.length > 0) setCachedEvents(category, data)
     }).catch(() => {})
     // Prefetch other categories
     if (!hasFetched.current) {
@@ -153,10 +166,8 @@ export default function MarketGrid() {
     const cached = getCachedEvents(category)
     if (cached) setMarkets(cached)
     fetchEventsData(category).then((data) => {
-      if (data) {
-        setMarkets(data)
-        setCachedEvents(category, data)
-      }
+      setMarkets(data)
+      if (data.length > 0) setCachedEvents(category, data)
     }).catch(() => {})
   }, [category, mounted])
 
@@ -254,8 +265,8 @@ export default function MarketGrid() {
     })
   }
 
-  // Show skeleton cards if no data yet or not mounted (to avoid hydration mismatch)
-  const showSkeleton = !mounted || markets.length === 0
+  // Show skeleton cards only when not mounted yet
+  const showSkeleton = !mounted
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 pb-16 relative">
@@ -267,6 +278,8 @@ export default function MarketGrid() {
               <SkeletonCard />
             </div>
           ))
+        ) : markets.length === 0 ? (
+          null
         ) : (
           columns.map((column, colIdx) => {
             const spinning = spinningColumns[colIdx]
@@ -295,7 +308,7 @@ export default function MarketGrid() {
         )}
       </div>
 
-      {!showSkeleton && !markets.length && (
+      {mounted && markets.length === 0 && (
         <div className="text-center text-muted-foreground py-20 font-display text-xl">No markets available</div>
       )}
 

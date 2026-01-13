@@ -1,10 +1,13 @@
+from decimal import Decimal
 from ..models import Event, Market, MarketOption
 
 
 def serialize_option(option: MarketOption):
     probability_bps = None
+    volume_total = Decimal("0")
     if hasattr(option, "stats") and option.stats:
         probability_bps = option.stats.prob_bps
+        volume_total = option.stats.volume_total or Decimal("0")
 
     return {
         "id": option.id,
@@ -13,6 +16,7 @@ def serialize_option(option: MarketOption):
         "side": option.side,
         "probability_bps": probability_bps,
         "probability": round(probability_bps / 100, 2) if probability_bps is not None else None,
+        "volume_total": float(volume_total),
     }
 
 
@@ -25,6 +29,9 @@ def serialize_market(market: Market):
 
     option_payload = [serialize_option(o) for o in options]
     is_binary = len(option_payload) == 2
+
+    # Aggregate volume_total from all options
+    total_volume = sum(o.get("volume_total", 0) for o in option_payload)
 
     return {
         "id": str(market.id),
@@ -47,6 +54,7 @@ def serialize_market(market: Market):
         "created_at": market.created_at.isoformat() if market.created_at else None,
         "updated_at": market.updated_at.isoformat() if market.updated_at else None,
         "options": option_payload,
+        "volume_total": total_volume,
     }
 
 

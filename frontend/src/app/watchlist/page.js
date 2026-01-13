@@ -8,6 +8,15 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
+function formatVolume(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return "—"
+  if (num >= 1000000) return `$${(num / 1000000).toFixed(1)}M`
+  if (num >= 1000) return `$${(num / 1000).toFixed(1)}K`
+  if (num > 0) return `$${num.toFixed(0)}`
+  return "$0"
+}
+
 export default function WatchlistPage() {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -38,14 +47,21 @@ export default function WatchlistPage() {
               name: o.title,
               probability: o.probability ?? (o.probability_bps != null ? Math.round(o.probability_bps / 100) : 0),
             }))
+            const exclusiveOutcomes = markets.map((m, idx) => {
+              const yesOption = (m.options || []).find((o) => String(o.title || "").trim().toLowerCase() === "yes")
+              const prob = yesOption?.probability ?? (yesOption?.probability_bps != null ? Math.round(yesOption.probability_bps / 100) : 0)
+              return { name: m.title || m.assertion_text || `Option ${idx + 1}`, probability: prob, market_id: m.id }
+            }).sort((a, b) => b.probability - a.probability)
+            const multiOutcomes = groupRule === "standalone" ? standaloneOutcomes : exclusiveOutcomes
             const yesOption = standaloneOutcomes.find((o) => String(o.name || "").toLowerCase() === "yes")
+            const rawVolume = groupRule === "standalone" ? Number(primaryMarket?.volume_total) || 0 : markets.reduce((sum, m) => sum + (Number(m.volume_total) || 0), 0)
             return {
               id: evt.id,
               title: evt.title,
-              outcomes: standaloneOutcomes,
+              outcomes: multiOutcomes,
               chance: yesOption ? yesOption.probability : undefined,
               image: evt.cover_url || primaryMarket?.cover_url || "📈",
-              volume: primaryMarket?.volume_total || "—",
+              volume: formatVolume(rawVolume),
               group_rule: groupRule,
             }
           })
