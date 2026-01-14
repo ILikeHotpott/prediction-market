@@ -533,6 +533,7 @@ def order_history(request):
             all_items.append({
                 "id": f"order_{intent.id}",
                 "market_id": str(intent.market_id),
+                "event_id": str(intent.market.event_id) if intent.market and intent.market.event_id else None,
                 "market_title": intent.market.title if intent.market else None,
                 "event_title": event_title,
                 "option_id": intent.option_id,
@@ -565,6 +566,7 @@ def order_history(request):
             all_items.append({
                 "id": f"settle_{sp.id}",
                 "market_id": str(sp.market_id),
+                "event_id": str(sp.market.event_id) if sp.market and sp.market.event_id else None,
                 "market_title": sp.market.title if sp.market else None,
                 "event_title": event_title,
                 "option_id": sp.option_id,

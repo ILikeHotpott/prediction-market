@@ -86,8 +86,8 @@ export default function MarketChart({
       setLoading(true)
       fetchSeriesData()
 
-      // Poll every 2 seconds for 1M, every 5 seconds for others
-      const pollInterval = interval === "1M" ? 2000 : 5000
+      // Poll every 10 seconds for 1M, every 30 seconds for others (reduce egress)
+      const pollInterval = interval === "1M" ? 10000 : 30000
       pollRef.current = window.setInterval(fetchSeriesData, pollInterval)
     }
 

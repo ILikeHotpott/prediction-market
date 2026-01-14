@@ -74,14 +74,19 @@ def get_series(request):
         is_active=True,
     ).values_list("id", flat=True)
 
-    # Query series data
+    # Query series data with strict limits
     qs = MarketOptionSeries.objects.filter(option_id__in=options)
 
     if hours:
         start_time = now - timedelta(hours=hours)
         qs = qs.filter(bucket_start__gte=start_time)
+    else:
+        # For "ALL" interval, limit to last 7 days to prevent egress explosion
+        start_time = now - timedelta(days=7)
+        qs = qs.filter(bucket_start__gte=start_time)
 
-    qs = qs.order_by("option_id", "bucket_start")
+    # Hard limit: max 2000 points per option to cap response size
+    qs = qs.order_by("option_id", "bucket_start")[:2000]
 
     # Group by option_id and collect raw points
     raw_series = {}

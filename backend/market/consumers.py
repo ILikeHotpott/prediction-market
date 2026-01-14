@@ -62,8 +62,8 @@ class SeriesConsumer(AsyncWebsocketConsumer):
     async def stream_updates(self):
         """Periodically send updates while connected."""
         while self.streaming:
-            # 1M interval updates every 1 second, others every 5 seconds
-            delay = 1 if self.interval == "1M" else 5
+            # Reduce polling frequency: 1M every 5s, others every 10s
+            delay = 5 if self.interval == "1M" else 10
             await asyncio.sleep(delay)
             if self.streaming:
                 await self.send_series_data()
@@ -99,7 +99,7 @@ class SeriesConsumer(AsyncWebsocketConsumer):
                 "option_index": opt.option_index,
             }
 
-        # Query series data
+        # Query series data with strict limits
         hours = INTERVAL_HOURS.get(self.interval)
         now = timezone.now()
 
@@ -107,7 +107,13 @@ class SeriesConsumer(AsyncWebsocketConsumer):
         if hours:
             start_time = now - timedelta(hours=hours)
             qs = qs.filter(bucket_start__gte=start_time)
-        qs = qs.order_by("option_id", "bucket_start")
+        else:
+            # For "ALL" interval, limit to last 7 days to prevent egress explosion
+            start_time = now - timedelta(days=7)
+            qs = qs.filter(bucket_start__gte=start_time)
+
+        # Hard limit: max 2000 points per option to cap response size
+        qs = qs.order_by("option_id", "bucket_start")[:2000]
 
         # Group by option_id
         series = {}

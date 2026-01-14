@@ -722,7 +722,7 @@ export default function PortfolioPage() {
                                     return (
                                       <>
                                         <Link
-                                          href={`/market/${h.market_id}`}
+                                          href={`/market/${h.event_id || h.market_id}`}
                                           className="text-slate-900 font-medium hover:text-red-600"
                                           title={eventTitle}
                                         >
