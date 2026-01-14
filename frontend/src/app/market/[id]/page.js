@@ -33,6 +33,7 @@ export default function MarketDetail({ params }) {
   const [toastType, setToastType] = useState("success")
   const [balance, setBalance] = useState(null)
   const [positionsMap, setPositionsMap] = useState({})
+  const [chartRefreshTrigger, setChartRefreshTrigger] = useState(0)
 
   const marketsSorted = useMemo(() => {
     return (eventData?.markets || [])
@@ -73,9 +74,17 @@ export default function MarketDetail({ params }) {
     fetchEvent(marketId)
   }, [marketId])
 
+  // Track if selectMarket was just called to avoid useEffect override
+  const selectMarketCalledRef = useRef(false)
+
   useEffect(() => {
     // when switching market, pick a sensible default option (prefer YES)
+    // but skip if selectMarket was just called (it already set the correct values)
     if (!selectedMarket) return
+    if (selectMarketCalledRef.current) {
+      selectMarketCalledRef.current = false
+      return
+    }
     const yes = (selectedMarket.options || []).find((o) => (o.side || "").toLowerCase() === "yes")
     const first = (selectedMarket.options || [])[0]
     const target = yes || first || null
@@ -196,7 +205,7 @@ export default function MarketDetail({ params }) {
         setSelectedOptionId(normalizeId(target.id))
       }
     }
-  }, [outcomeAction, optionsSorted, yesOption, noOption, selectedOptionId])
+  }, [optionsSorted, yesOption, noOption, selectedOptionId])
 
   const selectOption = (opt, action = outcomeAction) => {
     if (!opt) return
@@ -206,6 +215,7 @@ export default function MarketDetail({ params }) {
 
   const selectMarket = (marketObj, action = "yes") => {
     if (!marketObj) return
+    selectMarketCalledRef.current = true
     setSelectedMarketId(normalizeId(marketObj.id))
     const yes = (marketObj.options || []).find((o) => (o.side || "").toLowerCase() === "yes")
     const no = (marketObj.options || []).find((o) => (o.side || "").toLowerCase() === "no")
@@ -377,20 +387,38 @@ export default function MarketDetail({ params }) {
         }))
       }
       
-      // Update local prices using post_prob_bps from API response to avoid full page refresh
-      if (data.post_prob_bps && Array.isArray(data.post_prob_bps) && selectedMarket) {
+      // Update local prices using post_prob_bps and option_ids from API response
+      if (data.post_prob_bps && Array.isArray(data.post_prob_bps)) {
+        // Build a map from option_id to new probability
+        const probMap = {}
+        const optionIds = data.option_ids || []
+        data.post_prob_bps.forEach((prob, idx) => {
+          const optId = normalizeId(optionIds[idx])
+          if (optId && prob != null && prob >= 0 && prob <= 10000) {
+            probMap[optId] = prob
+            // For binary markets, also compute the No option probability
+            const noProb = 10000 - prob
+            probMap[`${optId}_no`] = noProb
+          }
+        })
+
         setEventData((prev) => {
           if (!prev) return prev
           const updatedMarkets = (prev.markets || []).map((market) => {
-            if (normalizeId(market.id) !== normalizeId(selectedMarket.id)) {
-              return market
-            }
-            // Match using option_index since post_prob_bps array index corresponds to option_index
             const updatedOptions = (market.options || []).map((option) => {
-              const optionIdx = option.option_index ?? 0
-              const probBps = data.post_prob_bps[optionIdx]
-              if (probBps != null && probBps >= 0 && probBps <= 10000) {
-                return { ...option, probability_bps: probBps }
+              const optId = normalizeId(option.id)
+              // Check if this option's probability was updated
+              if (probMap[optId] != null) {
+                return { ...option, probability_bps: probMap[optId] }
+              }
+              // For No options, find the corresponding Yes option and compute inverse
+              const side = (option.side || "").toLowerCase()
+              if (side === "no") {
+                const yesOpt = (market.options || []).find((o) => (o.side || "").toLowerCase() === "yes")
+                const yesId = normalizeId(yesOpt?.id)
+                if (yesId && probMap[yesId] != null) {
+                  return { ...option, probability_bps: 10000 - probMap[yesId] }
+                }
               }
               return option
             })
@@ -402,6 +430,9 @@ export default function MarketDetail({ params }) {
       
       // Clear input
       setAmount("0")
+
+      // Trigger chart refresh immediately
+      setChartRefreshTrigger((prev) => prev + 1)
 
       // Update navigation portfolio overview; force refresh only after successful trade
       refreshPortfolio()
@@ -527,6 +558,7 @@ export default function MarketDetail({ params }) {
                 onSelectMarket={selectMarket}
                 selectedOptionId={selectedMarketId}
                 selectedAction={outcomeAction}
+                refreshTrigger={chartRefreshTrigger}
               />
 
               <Comments marketId={selectedMarket?.id} user={user} openAuthModal={openAuthModal} />

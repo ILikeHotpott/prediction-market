@@ -1,42 +1,27 @@
 """
-Django management command to record price history for market charts.
-Run this command in the background to continuously record prices.
+Django management command for series data maintenance.
+Price recording now happens automatically on each trade (in execution.py).
 
 Usage:
-    python manage.py record_prices --interval 5
+    python manage.py record_prices --cleanup
+    python manage.py record_prices --backfill
 """
 
-import time
-import signal
-import sys
 from django.core.management.base import BaseCommand
+from django.db import transaction
 
-from market.services.series_recorder import record_current_prices, cleanup_old_series
+from market.models import Trade, MarketOption, MarketOptionSeries
+from market.services.series_recorder import cleanup_old_series
 
 
 class Command(BaseCommand):
-    help = 'Record current market prices to series table for chart display'
-
-    def __init__(self):
-        super().__init__()
-        self.running = True
+    help = 'Maintain market price series data (cleanup or backfill)'
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--interval',
-            type=int,
-            default=5,
-            help='Interval in seconds between price recordings (default: 5)'
-        )
-        parser.add_argument(
-            '--once',
-            action='store_true',
-            help='Record prices once and exit'
-        )
-        parser.add_argument(
             '--cleanup',
             action='store_true',
-            help='Clean up old series data and exit'
+            help='Clean up old series data'
         )
         parser.add_argument(
             '--cleanup-days',
@@ -44,45 +29,72 @@ class Command(BaseCommand):
             default=30,
             help='Days of data to keep when cleaning up (default: 30)'
         )
+        parser.add_argument(
+            '--backfill',
+            action='store_true',
+            help='Rebuild series data from trades table'
+        )
 
     def handle(self, *args, **options):
-        interval = options['interval']
-        once = options['once']
         cleanup = options['cleanup']
         cleanup_days = options['cleanup_days']
+        backfill = options['backfill']
 
         if cleanup:
             deleted = cleanup_old_series(cleanup_days)
             self.stdout.write(self.style.SUCCESS(f'Cleaned up {deleted} old series records'))
-            return
+        elif backfill:
+            self._backfill_from_trades()
+        else:
+            self.stdout.write(
+                'Price recording now happens automatically on each trade.\n'
+                'Use --cleanup to remove old series data.\n'
+                'Use --backfill to rebuild series data from trades.'
+            )
 
-        # Handle graceful shutdown
-        def signal_handler(sig, frame):
-            self.stdout.write('\nShutting down...')
-            self.running = False
+    def _backfill_from_trades(self):
+        """Rebuild series data from trades table using price_bps from each trade."""
+        self.stdout.write('Starting backfill from trades...')
 
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        # Clear existing series data
+        deleted, _ = MarketOptionSeries.objects.all().delete()
+        self.stdout.write(f'Deleted {deleted} existing series records')
 
-        self.stdout.write(self.style.SUCCESS(f'Starting price recorder (interval: {interval}s)'))
+        # Get all trades with price_bps, ordered by time
+        trades = Trade.objects.filter(
+            price_bps__isnull=False
+        ).select_related('option').order_by('block_time')
 
-        if once:
-            count = record_current_prices()
-            self.stdout.write(self.style.SUCCESS(f'Recorded {count} price points'))
-            return
+        total = trades.count()
+        self.stdout.write(f'Processing {total} trades with price data...')
 
-        # Continuous recording loop
-        while self.running:
-            try:
-                count = record_current_prices()
-                self.stdout.write(f'Recorded {count} price points')
-            except Exception as e:
-                self.stdout.write(self.style.ERROR(f'Error recording prices: {e}'))
+        series_to_create = []
+        for i, trade in enumerate(trades.iterator()):
+            option = trade.option
+            if not option or option.side != 'yes':
+                continue
 
-            # Sleep in small increments to allow for graceful shutdown
-            for _ in range(interval):
-                if not self.running:
-                    break
-                time.sleep(1)
+            series_to_create.append(MarketOptionSeries(
+                option_id=option.id,
+                market_id=option.market_id,
+                interval="1M",
+                bucket_start=trade.block_time,
+                value_bps=trade.price_bps,
+                created_at=trade.block_time,
+            ))
 
-        self.stdout.write(self.style.SUCCESS('Price recorder stopped'))
+            if (i + 1) % 100 == 0:
+                self.stdout.write(f'Processed {i + 1}/{total} trades...')
+
+        # Bulk create all series entries
+        if series_to_create:
+            with transaction.atomic():
+                MarketOptionSeries.objects.bulk_create(
+                    series_to_create,
+                    update_conflicts=True,
+                    update_fields=["value_bps", "created_at"],
+                    unique_fields=["option_id", "interval", "bucket_start"],
+                )
+            self.stdout.write(self.style.SUCCESS(f'Created {len(series_to_create)} series records'))
+        else:
+            self.stdout.write(self.style.WARNING('No series records to create'))

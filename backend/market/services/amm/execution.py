@@ -365,17 +365,11 @@ def _update_stats_volume(option_id: str, amount_delta: Decimal, now):
 
 def _record_price_series(option_states: List[AmmPoolOptionState], prob_bps: List[int], now):
     """
-    Record price history to market_option_series table.
-    Best-effort; failures should not abort the trade.
-
-    Uses 5-second buckets to avoid spikes from rapid trades.
+    Record price history to market_option_series table after a trade.
+    Each trade creates a new data point with exact timestamp (microsecond precision).
+    If a record already exists for the same (option_id, interval, bucket_start), update it.
     """
     try:
-        # Round to 5-second bucket to avoid spikes
-        bucket = now.replace(microsecond=0)
-        second = (bucket.second // 5) * 5
-        bucket = bucket.replace(second=second)
-
         rows = []
         for st, prob in zip(option_states, prob_bps):
             opt = st.option
@@ -383,21 +377,22 @@ def _record_price_series(option_states: List[AmmPoolOptionState], prob_bps: List
                 option_id=opt.id,
                 market_id=opt.market_id,
                 interval="1M",
-                bucket_start=bucket,
+                bucket_start=now,  # Use exact trade time with microsecond precision
                 value_bps=prob,
+                created_at=now,
             ))
 
         if rows:
-            # Use update_conflicts to update existing bucket with latest price
+            # Use bulk_create with update_conflicts to handle duplicate timestamps
+            # This ensures we don't lose data when trades happen in the same second
             MarketOptionSeries.objects.bulk_create(
                 rows,
                 update_conflicts=True,
+                update_fields=["value_bps", "created_at"],
                 unique_fields=["option_id", "interval", "bucket_start"],
-                update_fields=["value_bps"],
             )
     except Exception as e:
         logger.warning("Failed to record price series: %s", e)
-        # Best-effort, don't fail the trade
 
 
 def execute_buy(
@@ -637,6 +632,7 @@ def execute_buy(
             "avg_price_bps": quote.get("avg_price_bps"),
             "pre_prob_bps": quote.get("pre_prob_bps"),
             "post_prob_bps": quote.get("post_prob_bps"),
+            "option_ids": pool_state.option_ids,
             "balance_available": str(balance.available_amount),
             "position": {"shares": str(position.shares), "cost_basis": str(position.cost_basis)},
             "order_intent_id": order_intent.id,
@@ -885,6 +881,7 @@ def execute_sell(
             "avg_price_bps": quote.get("avg_price_bps"),
             "pre_prob_bps": quote.get("pre_prob_bps"),
             "post_prob_bps": quote.get("post_prob_bps"),
+            "option_ids": pool_state.option_ids,
             "balance_available": str(balance.available_amount),
             "position": {"shares": str(position.shares), "cost_basis": str(position.cost_basis)},
             "order_intent_id": order_intent.id,
