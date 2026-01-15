@@ -172,7 +172,7 @@ def _get_option_series(
     # Build query with optimized field selection
     query = MarketOptionSeries.objects.filter(
         option_id=option_id,
-        interval="5M",  # Changed from 1M to 5M
+        interval="1M",
     ).only("bucket_start", "value_bps")
 
     # Apply time filter if start_time is specified
@@ -198,7 +198,7 @@ def _get_option_series(
         last_before = (
             MarketOptionSeries.objects.filter(
                 option_id=option_id,
-                interval="5M",  # Changed from 1M to 5M
+                interval="1M",
                 bucket_start__lt=start_time,
             )
             .values("bucket_start", "value_bps")

@@ -120,16 +120,16 @@ export default function MarketChartRecharts({
   useEffect(() => {
     if (!marketIds.length) return
 
-    // Fetch current interval immediately
-    fetchData(marketIds, interval).then(data => {
+    // Force fresh fetch when refreshTrigger changes
+    fetchData(marketIds, interval, true).then(data => {
       setAllData(prev => ({ ...prev, [interval]: data }))
       setLoading(false)
     })
 
-    // Prefetch other intervals after 100ms
+    // Prefetch other intervals after 100ms with force refresh
     const timer = setTimeout(() => {
       INTERVALS.filter(int => int !== interval).forEach(int => {
-        fetchData(marketIds, int).then(data => {
+        fetchData(marketIds, int, true).then(data => {
           setAllData(prev => ({ ...prev, [int]: data }))
         })
       })
