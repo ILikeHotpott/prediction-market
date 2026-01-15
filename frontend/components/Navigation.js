@@ -8,6 +8,13 @@ import { Bell, Menu, X, User, Trophy, Bookmark, LogOut } from "lucide-react";
 import SearchDropdown from "@/components/SearchDropdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { usePortfolio } from "@/components/PortfolioProvider";
 import Logo from "@/components/Logo";
@@ -31,7 +38,6 @@ function prefetchCategory(categoryValue) {
 }
 
 export default function Navigation() {
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const { theme, setTheme } = useTheme();
@@ -126,43 +132,54 @@ export default function Navigation() {
                   </Button>
                   <Bell className="w-6 h-6 text-muted-foreground cursor-pointer hover:text-accent transition-colors" />
 
-                  <div
-                    className="relative"
-                    onMouseEnter={() => setShowUserMenu(true)}
-                    onMouseLeave={() => setShowUserMenu(false)}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-white/10 border-2 border-white/20 cursor-pointer overflow-hidden flex items-center justify-center hover:border-accent transition-colors">
-                      {avatarUrl ? (
-                        <img
-                          src={avatarUrl}
-                          alt="User"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-white font-bold font-display">
-                          {displayName.charAt(0)}
-                        </span>
-                      )}
-                    </div>
-
-                    {showUserMenu && (
-                      <div className="absolute right-0 top-full pt-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                        <div className="w-56 rounded-xl shadow-xl border border-[#e6ddcb] py-2 z-50" style={{ background: '#f9f6ee' }}>
-                          <MenuItem icon={<User className="w-4 h-4" />} label="Profile" href="/profile" />
-                          <MenuItem icon={<Trophy className="w-4 h-4" />} label="Leaderboard" href="/leaderboard" />
-                          <MenuItem icon={<Bookmark className="w-4 h-4" />} label="Watchlist" href="/watchlist" />
-                          <div className="border-t border-[#e6ddcb] mt-2 pt-2">
-                            <MenuItem
-                              icon={<LogOut className="w-4 h-4" />}
-                              label="Logout"
-                              className="text-red-500"
-                              onClick={signOut}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="w-10 h-10 rounded-full bg-white/10 border-2 border-white/20 cursor-pointer overflow-hidden flex items-center justify-center hover:border-accent transition-colors focus:outline-none focus:ring-2 focus:ring-accent">
+                        {avatarUrl ? (
+                          <img
+                            src={avatarUrl}
+                            alt="User"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-white font-bold font-display">
+                            {displayName.charAt(0)}
+                          </span>
+                        )}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="w-56 rounded-sm shadow-xl border border-[#e6ddcb] bg-[#f9f6ee] text-gray-700"
+                    >
+                      <DropdownMenuItem asChild>
+                        <Link href="/profile" className="flex items-center gap-3 cursor-pointer">
+                          <User className="w-4 h-4" />
+                          <span className="font-medium">Profile</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/leaderboard" className="flex items-center gap-3 cursor-pointer">
+                          <Trophy className="w-4 h-4" />
+                          <span className="font-medium">Leaderboard</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/watchlist" className="flex items-center gap-3 cursor-pointer">
+                          <Bookmark className="w-4 h-4" />
+                          <span className="font-medium">Watchlist</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-[#e6ddcb]" />
+                      <DropdownMenuItem
+                        onClick={signOut}
+                        className="text-red-500 cursor-pointer flex items-center gap-3"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span className="font-medium">Logout</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </>
               )}
             </div>
@@ -302,31 +319,5 @@ export default function Navigation() {
         onSuccess={() => refreshPortfolio()}
       />
     </nav>
-  );
-}
-
-function MenuItem({ icon, label, className = "", onClick, href }) {
-  const content = (
-    <div className="flex items-center gap-3 text-gray-700">
-      {icon}
-      <span className="font-medium">{label}</span>
-    </div>
-  );
-
-  if (href) {
-    return (
-      <Link href={href} className={`block px-4 py-2.5 hover:bg-black/5 cursor-pointer transition-colors ${className}`}>
-        {content}
-      </Link>
-    );
-  }
-
-  return (
-    <div
-      className={`px-4 py-2.5 hover:bg-black/5 cursor-pointer transition-colors ${className}`}
-      onClick={onClick}
-    >
-      {content}
-    </div>
   );
 }

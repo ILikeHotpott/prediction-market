@@ -6,7 +6,8 @@ import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ResolveMarketDialog from "@/components/admin/ResolveMarketDialog";
-import RedemptionCodeGenerator from "@/components/admin/RedemptionCodeGenerator";
+import RedemptionCodeGeneratorForm from "@/components/admin/RedemptionCodeGeneratorForm";
+import RedemptionCodesList from "@/components/admin/RedemptionCodesList";
 import {
   Pagination,
   PaginationContent,
@@ -16,7 +17,9 @@ import {
   PaginationNext,
   PaginationEllipsis,
 } from "@/components/ui/pagination";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ADMIN_CATEGORIES } from "@/lib/constants/categories";
+import { Copy, Check } from "lucide-react";
 
 const backendBase =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -367,30 +370,38 @@ export default function AdminMarketsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#202b39] text-white">
-      <Suspense fallback={<div className="h-20 bg-[#202b39]" />}>
+    <div className="min-h-screen bg-background text-foreground">
+      <Suspense fallback={<div className="h-20 bg-background" />}>
         <Navigation />
       </Suspense>
       <main className="max-w-5xl mx-auto px-6 py-8">
         <header className="flex items-center justify-between mb-6">
           <div>
-            <div className="text-sm text-gray-300">Admin</div>
+            <div className="text-sm opacity-70">Admin</div>
             <h1 className="text-3xl font-semibold">Market Management</h1>
           </div>
-          <span className="text-sm text-gray-400">
+          <span className="text-sm opacity-60">
             Backend URL: {backendBase}
           </span>
         </header>
 
         {userRole === "admin" ? (
-          <>
-        <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6 mb-8">
+          <Tabs defaultValue="events" className="w-full">
+            <TabsList className="mb-6">
+              <TabsTrigger value="create">Create Event</TabsTrigger>
+              <TabsTrigger value="events">Event List</TabsTrigger>
+              <TabsTrigger value="generate">Generate Code</TabsTrigger>
+              <TabsTrigger value="codes">Redemption Codes</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="create">
+        <section className="bg-card border border rounded-xl p-6">
           <h2 className="text-xl font-semibold mb-4">Create New Event (draft)</h2>
           <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={handleCreate}>
             <div className="md:col-span-2">
-              <label className="text-sm text-gray-300">Title *</label>
+              <label className="text-sm text-foreground opacity-80">Title *</label>
               <input
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                 value={form.title}
                 onChange={(e) => handleChange("title", e.target.value)}
                 placeholder="Market title"
@@ -398,9 +409,9 @@ export default function AdminMarketsPage() {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-sm text-gray-300">Description *</label>
+              <label className="text-sm text-foreground opacity-80">Description *</label>
               <textarea
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white h-28"
+                className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground h-28"
                 value={form.description}
                 onChange={(e) => handleChange("description", e.target.value)}
                 placeholder="Brief description"
@@ -408,9 +419,9 @@ export default function AdminMarketsPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-gray-300">Category</label>
+              <label className="text-sm text-foreground opacity-80">Category</label>
               <select
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                 value={form.category}
                 onChange={(e) => handleChange("category", e.target.value)}
               >
@@ -423,7 +434,7 @@ export default function AdminMarketsPage() {
               </select>
             </div>
             <div>
-              <label className="text-sm text-gray-300">Cover Image</label>
+              <label className="text-sm text-foreground opacity-80">Cover Image</label>
               <div className="mt-1 flex items-center gap-3">
                 <input
                   ref={fileInputRef}
@@ -447,7 +458,7 @@ export default function AdminMarketsPage() {
                       alt="Cover preview"
                       className="h-10 w-10 object-cover rounded"
                     />
-                    <span className="text-xs text-gray-400 truncate max-w-[150px]">
+                    <span className="text-xs text-foreground opacity-60 truncate max-w-[150px]">
                       {form.cover_url.split("/").pop()}
                     </span>
                     <button
@@ -462,27 +473,27 @@ export default function AdminMarketsPage() {
               </div>
             </div>
             <div>
-              <label className="text-sm text-gray-300">Slug</label>
+              <label className="text-sm text-foreground opacity-80">Slug</label>
               <input
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                 value={form.slug}
                 onChange={(e) => handleChange("slug", e.target.value)}
                 placeholder="Unique identifier, optional"
               />
             </div>
             <div>
-              <label className="text-sm text-gray-300">Chain/Network</label>
+              <label className="text-sm text-foreground opacity-80">Chain/Network</label>
               <input
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                 value={form.chain}
                 onChange={(e) => handleChange("chain", e.target.value)}
                 placeholder="e.g. base, polygon"
               />
             </div>
             <div>
-              <label className="text-sm text-gray-300">Group Rule</label>
+              <label className="text-sm text-foreground opacity-80">Group Rule</label>
               <select
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                 value={form.group_rule}
                 onChange={(e) => handleChange("group_rule", e.target.value)}
               >
@@ -492,20 +503,20 @@ export default function AdminMarketsPage() {
               </select>
             </div>
             <div>
-              <label className="text-sm text-gray-300">Trading Deadline *</label>
+              <label className="text-sm text-foreground opacity-80">Trading Deadline *</label>
               <input
                 type="datetime-local"
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                 value={form.trading_deadline}
                 onChange={(e) => handleChange("trading_deadline", e.target.value)}
                 required
               />
             </div>
             <div>
-              <label className="text-sm text-gray-300">Resolution Deadline</label>
+              <label className="text-sm text-foreground opacity-80">Resolution Deadline</label>
               <input
                 type="datetime-local"
-                className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                 value={form.resolution_deadline}
                 onChange={(e) => handleChange("resolution_deadline", e.target.value)}
               />
@@ -520,19 +531,19 @@ export default function AdminMarketsPage() {
             </div>
             <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="text-sm text-gray-300">AMM Model</label>
+                <label className="text-sm text-foreground opacity-80">AMM Model</label>
                 <input
-                  className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                  className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                   value={form.amm_model}
                   onChange={(e) => handleChange("amm_model", e.target.value)}
                   placeholder="lmsr"
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-300">AMM b (Liquidity Parameter) *</label>
+                <label className="text-sm text-foreground opacity-80">AMM b (Liquidity Parameter) *</label>
                 <input
                   type="number"
-                  className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                  className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                   value={form.amm_b}
                   onChange={(e) => handleChange("amm_b", e.target.value)}
                   min="0"
@@ -541,10 +552,10 @@ export default function AdminMarketsPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-300">Trading Fee (bps) *</label>
+                <label className="text-sm text-foreground opacity-80">Trading Fee (bps) *</label>
                 <input
                   type="number"
-                  className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                  className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                   value={form.amm_fee_bps}
                   onChange={(e) => handleChange("amm_fee_bps", e.target.value)}
                   min="0"
@@ -553,9 +564,9 @@ export default function AdminMarketsPage() {
                 />
               </div>
               <div>
-                <label className="text-sm text-gray-300">Collateral Token *</label>
+                <label className="text-sm text-foreground opacity-80">Collateral Token *</label>
                 <input
-                  className="w-full mt-1 bg-[#0f172a] border border-[#334155] rounded-lg p-3 text-white"
+                  className="w-full mt-1 bg-popover border border rounded-lg p-3 text-foreground"
                   value={form.amm_collateral_token}
                   onChange={(e) => handleChange("amm_collateral_token", e.target.value)}
                   placeholder="e.g. USDC or contract address"
@@ -565,7 +576,7 @@ export default function AdminMarketsPage() {
             </div>
           </form>
           {form.group_rule === "standalone" ? (
-            <div className="mt-6 text-sm text-gray-300">
+            <div className="mt-6 text-sm text-foreground opacity-80">
               Standalone mode will automatically create a binary market (Yes / No), no need to add sub-markets.
             </div>
           ) : (
@@ -580,12 +591,12 @@ export default function AdminMarketsPage() {
                 {(form.markets || []).map((opt, idx) => (
                   <div
                     key={idx}
-                    className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-[#0f172a] border border-[#334155] rounded-lg p-3"
+                    className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-popover border border rounded-lg p-3"
                   >
                     <div className="md:col-span-9">
-                      <label className="text-xs text-gray-400">Sub-market Title *</label>
+                      <label className="text-xs text-foreground opacity-60">Sub-market Title *</label>
                       <input
-                        className="w-full mt-1 bg-[#111827] border border-[#1f2937] rounded-lg p-2 text-white"
+                        className="w-full mt-1 bg-popover border border rounded-lg p-2 text-foreground"
                         value={opt.title}
                         onChange={(e) => handleMarketChange(idx, "title", e.target.value)}
                         placeholder={`Sub-market ${idx + 1}`}
@@ -608,13 +619,15 @@ export default function AdminMarketsPage() {
             </div>
           )}
         </section>
+            </TabsContent>
 
-        <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6">
+            <TabsContent value="events">
+        <section className="bg-card border border rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Event List</h2>
             <div className="flex items-center gap-4">
               <select
-                className="bg-[#0f172a] border border-[#334155] rounded-lg px-3 py-2 text-white text-sm"
+                className="bg-popover border border rounded-lg px-3 py-2 text-foreground text-sm"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
@@ -633,7 +646,7 @@ export default function AdminMarketsPage() {
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
-              <thead className="text-gray-300">
+              <thead className="text-foreground opacity-80">
                 <tr className="text-left">
                   <th className="p-2">Title</th>
                   <th className="p-2">Status</th>
@@ -645,65 +658,36 @@ export default function AdminMarketsPage() {
               </thead>
               <tbody>
                 {pagedEvents.map((m) => (
-                  <tr key={m.id} className="border-t border-[#334155]">
+                  <tr key={m.id} className="border-t border">
                     <td className="p-2">{m.title}</td>
                     <td className="p-2">
-                      <span className="px-2 py-1 bg-[#0f172a] rounded">
+                      <span className="px-2 py-1 bg-popover rounded">
                         {m.status}
                       </span>
                     </td>
-                    <td className="p-2 text-gray-300">
+                    <td className="p-2 text-foreground opacity-80">
                       {(m.markets || []).length}
                     </td>
-                    <td className="p-2 text-gray-300">
+                    <td className="p-2 text-foreground opacity-80">
                       {m.trading_deadline
                         ? new Date(m.trading_deadline).toLocaleString()
                         : "-"}
                     </td>
-                    <td className="p-2 text-gray-300">{m.slug || "-"}</td>
+                    <td className="p-2 text-foreground opacity-80">{m.slug || "-"}</td>
                     <td className="p-2">
-                      <div className="flex gap-2 flex-wrap">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleStatusChange(m.id, "draft")}
+                      <div className="flex gap-2 items-center">
+                        <select
+                          value={m.status}
+                          onChange={(e) => handleStatusChange(m.id, e.target.value)}
+                          className="bg-popover border border rounded-lg px-3 py-1.5 text-foreground text-sm"
                         >
-                          Draft
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleStatusChange(m.id, "pending")}
-                        >
-                          Pending
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleStatusChange(m.id, "active")}
-                        >
-                          Active
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleStatusChange(m.id, "closed")}
-                        >
-                          Closed
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleStatusChange(m.id, "resolved")}
-                        >
-                          Resolved
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleStatusChange(m.id, "canceled")}
-                        >
-                          Canceled
-                        </Button>
+                          <option value="draft">Draft</option>
+                          <option value="pending">Pending</option>
+                          <option value="active">Active</option>
+                          <option value="closed">Closed</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="canceled">Canceled</option>
+                        </select>
                         {(m.status === "active" || m.status === "closed") && (
                           <Button
                             size="sm"
@@ -727,7 +711,7 @@ export default function AdminMarketsPage() {
                 ))}
                 {!pagedEvents.length && (
                   <tr>
-                    <td className="p-4 text-gray-400" colSpan={6}>
+                    <td className="p-4 text-foreground opacity-60" colSpan={6}>
                       {statusFilter === "all" ? "No events" : `No ${statusFilter} events`}
                     </td>
                   </tr>
@@ -736,8 +720,8 @@ export default function AdminMarketsPage() {
             </table>
           </div>
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#334155]">
-              <div className="text-sm text-gray-400">
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border">
+              <div className="text-sm text-foreground opacity-60">
                 Total {filteredEvents.length} items, Page {currentPage}/{totalPages}
               </div>
               <Pagination>
@@ -779,15 +763,19 @@ export default function AdminMarketsPage() {
             </div>
           )}
         </section>
+            </TabsContent>
 
-        {/* Redemption Code Generator Section */}
-        <section className="mt-8">
-          <RedemptionCodeGenerator user={user} />
-        </section>
-          </>
+            <TabsContent value="generate">
+              <RedemptionCodeGeneratorForm user={user} />
+            </TabsContent>
+
+            <TabsContent value="codes">
+              <RedemptionCodesList user={user} />
+            </TabsContent>
+          </Tabs>
         ) : (
-          <section className="bg-[#1f2937] border border-[#334155] rounded-xl p-6">
-            <div className="text-white text-lg">
+          <section className="bg-card border border rounded-xl p-6">
+            <div className="text-foreground text-lg">
               {authLoading ? "Loading..." : "Admin access only"}
             </div>
           </section>
