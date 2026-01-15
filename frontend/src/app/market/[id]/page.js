@@ -34,6 +34,7 @@ export default function MarketDetail({ params }) {
   const [balance, setBalance] = useState(null)
   const [positionsMap, setPositionsMap] = useState({})
   const [chartRefreshTrigger, setChartRefreshTrigger] = useState(0)
+  const [chartInterval, setChartInterval] = useState("1H")
 
   const marketsSorted = useMemo(() => {
     return (eventData?.markets || [])
@@ -76,11 +77,15 @@ export default function MarketDetail({ params }) {
 
   // Track if selectMarket was just called to avoid useEffect override
   const selectMarketCalledRef = useRef(false)
+  const prevSelectedMarketIdRef = useRef(null)
 
   useEffect(() => {
     // when switching market, pick a sensible default option (prefer YES)
     // but skip if selectMarket was just called (it already set the correct values)
     if (!selectedMarket) return
+    const currentId = normalizeId(selectedMarket.id)
+    if (prevSelectedMarketIdRef.current === currentId) return
+    prevSelectedMarketIdRef.current = currentId
     if (selectMarketCalledRef.current) {
       selectMarketCalledRef.current = false
       return
@@ -105,25 +110,48 @@ export default function MarketDetail({ params }) {
     }
   }, [user])
 
-  async function fetchEvent(id) {
-    setLoading(true)
-    setError("")
-    setSuccess("")
+  async function fetchEvent(id, { silent = false, preserveSelection = false } = {}) {
+    const currentMarketId = preserveSelection ? normalizeId(selectedMarketId) : null
+    const currentOptionId = preserveSelection ? normalizeId(selectedOptionId) : null
+    if (!silent) {
+      setLoading(true)
+      setError("")
+      setSuccess("")
+    }
     try {
       const res = await fetch(`${backendBase}/api/events/${id}/`, { cache: "no-store" })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to load event")
       setEventData(data)
       const primaryMarketId = data.primary_market_id || data.primary_market?.id || data.markets?.[0]?.id
-      setSelectedMarketId(normalizeId(primaryMarketId))
-      const firstMarket = (data.markets || []).find((m) => normalizeId(m.id) === normalizeId(primaryMarketId)) || data.markets?.[0]
-      const firstOption =
-        (firstMarket?.options || []).sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))[0]
-      setSelectedOptionId(normalizeId(firstOption?.id))
+      if (preserveSelection) {
+        const preferredMarket =
+          (data.markets || []).find((m) => normalizeId(m.id) === currentMarketId) ||
+          (data.markets || []).find((m) => normalizeId(m.id) === normalizeId(primaryMarketId)) ||
+          data.markets?.[0]
+        const nextMarketId = normalizeId(preferredMarket?.id || primaryMarketId)
+        setSelectedMarketId(nextMarketId)
+        const sortedOptions = (preferredMarket?.options || [])
+          .slice()
+          .sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))
+        const preferredOption = sortedOptions.find((o) => normalizeId(o.id) === currentOptionId) || sortedOptions[0]
+        setSelectedOptionId(normalizeId(preferredOption?.id))
+      } else {
+        setSelectedMarketId(normalizeId(primaryMarketId))
+        const firstMarket =
+          (data.markets || []).find((m) => normalizeId(m.id) === normalizeId(primaryMarketId)) || data.markets?.[0]
+        const firstOption =
+          (firstMarket?.options || []).sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))[0]
+        setSelectedOptionId(normalizeId(firstOption?.id))
+      }
     } catch (e) {
-      setError(e.message || "Failed to load")
+      if (!silent || !eventData) {
+        setError(e.message || "Failed to load")
+      }
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -388,44 +416,48 @@ export default function MarketDetail({ params }) {
       }
       
       // Update local prices using post_prob_bps and option_ids from API response
-      if (data.post_prob_bps && Array.isArray(data.post_prob_bps)) {
-        // Build a map from option_id to new probability
+      const postProbBps = Array.isArray(data.post_prob_bps) ? data.post_prob_bps : []
+      if (postProbBps.length > 0) {
+        const optionIds = Array.isArray(data.option_ids) ? data.option_ids : []
+        const normalizedOptionIds = optionIds.map((optId) => normalizeId(optId))
+        const hasOptionIds = normalizedOptionIds.length === postProbBps.length
+        const fallbackIds =
+          !hasOptionIds && optionsSorted.length === postProbBps.length
+            ? optionsSorted.map((opt) => normalizeId(opt.id))
+            : []
+        const sourceIds = hasOptionIds ? normalizedOptionIds : fallbackIds
         const probMap = {}
-        const optionIds = data.option_ids || []
-        data.post_prob_bps.forEach((prob, idx) => {
-          const optId = normalizeId(optionIds[idx])
-          if (optId && prob != null && prob >= 0 && prob <= 10000) {
+        sourceIds.forEach((optId, idx) => {
+          const prob = Number(postProbBps[idx])
+          if (optId && Number.isFinite(prob) && prob >= 0 && prob <= 10000) {
             probMap[optId] = prob
-            // For binary markets, also compute the No option probability
-            const noProb = 10000 - prob
-            probMap[`${optId}_no`] = noProb
           }
         })
 
-        setEventData((prev) => {
-          if (!prev) return prev
-          const updatedMarkets = (prev.markets || []).map((market) => {
-            const updatedOptions = (market.options || []).map((option) => {
-              const optId = normalizeId(option.id)
-              // Check if this option's probability was updated
-              if (probMap[optId] != null) {
-                return { ...option, probability_bps: probMap[optId] }
-              }
-              // For No options, find the corresponding Yes option and compute inverse
-              const side = (option.side || "").toLowerCase()
-              if (side === "no") {
-                const yesOpt = (market.options || []).find((o) => (o.side || "").toLowerCase() === "yes")
-                const yesId = normalizeId(yesOpt?.id)
-                if (yesId && probMap[yesId] != null) {
-                  return { ...option, probability_bps: 10000 - probMap[yesId] }
+        if (Object.keys(probMap).length > 0) {
+          setEventData((prev) => {
+            if (!prev) return prev
+            const updatedMarkets = (prev.markets || []).map((market) => {
+              const updatedOptions = (market.options || []).map((option) => {
+                const optId = normalizeId(option.id)
+                if (probMap[optId] != null) {
+                  return { ...option, probability_bps: probMap[optId] }
                 }
-              }
-              return option
+                const side = (option.side || "").toLowerCase()
+                if (side === "no") {
+                  const yesOpt = (market.options || []).find((o) => (o.side || "").toLowerCase() === "yes")
+                  const yesId = normalizeId(yesOpt?.id)
+                  if (yesId && probMap[yesId] != null) {
+                    return { ...option, probability_bps: 10000 - probMap[yesId] }
+                  }
+                }
+                return option
+              })
+              return { ...market, options: updatedOptions }
             })
-            return { ...market, options: updatedOptions }
+            return { ...prev, markets: updatedMarkets }
           })
-          return { ...prev, markets: updatedMarkets }
-        })
+        }
       }
       
       // Clear input
@@ -433,6 +465,11 @@ export default function MarketDetail({ params }) {
 
       // Trigger chart refresh immediately
       setChartRefreshTrigger((prev) => prev + 1)
+
+      // Refresh full event state in the background for consistency
+      if (marketId) {
+        fetchEvent(marketId, { silent: true, preserveSelection: true }).catch(() => {})
+      }
 
       // Update navigation portfolio overview; force refresh only after successful trade
       refreshPortfolio()
@@ -450,10 +487,11 @@ export default function MarketDetail({ params }) {
     }
   }
 
-  const formatCents = (price) =>
-    price != null
-      ? (price * 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })
-      : null
+  const formatCents = (price) => {
+    if (price == null) return null
+    const cents = price * 100
+    return cents.toFixed(1)
+  }
   const yesPriceCents = formatCents(yesPrice)
   const noPriceCents = formatCents(noPrice)
   const selectedYesPriceCents = yesPriceCents
@@ -494,7 +532,7 @@ export default function MarketDetail({ params }) {
         }}
       />
       <div className="flex-1 overflow-y-auto lg:overflow-hidden">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6 h-full">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 h-full">
         {loading && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Chart Area Skeleton */}
@@ -559,6 +597,8 @@ export default function MarketDetail({ params }) {
                 selectedOptionId={selectedMarketId}
                 selectedAction={outcomeAction}
                 refreshTrigger={chartRefreshTrigger}
+                interval={chartInterval}
+                onIntervalChange={setChartInterval}
               />
 
               <Comments marketId={selectedMarket?.id} user={user} openAuthModal={openAuthModal} />
@@ -567,10 +607,10 @@ export default function MarketDetail({ params }) {
             {/* Sidebar - fixed on desktop */}
             <div className="lg:w-1/3 space-y-6 lg:overflow-y-auto lg:h-full">
               {/* Trade Panel */}
-              <div className="bg-[#f9f6ee] text-slate-900 rounded-2xl border border-[#e6ddcb] shadow-md p-6">
+              <div className="bg-[#f9f6ee] text-slate-900 rounded-2xl border border-[#e6ddcb] shadow-md p-4">
                 {!isStandaloneEvent && (
-                  <div className="mb-4">
-                    <h3 className="text-slate-900 text-xl font-semibold leading-tight truncate">
+                  <div className="mb-3">
+                    <h3 className="text-slate-900 text-lg font-semibold leading-tight truncate">
                       {selectedMarket?.bucket_label || selectedMarket?.title || panelTitle}
                     </h3>
                     <div className="text-slate-600 text-xs truncate">{eventData?.title}</div>
@@ -578,10 +618,10 @@ export default function MarketDetail({ params }) {
                 )}
 
                 {/* Buy/Sell Tabs */}
-                <div className="flex gap-6 mt-6 border-b border-[#e6ddcb]">
+                <div className="flex gap-4 mt-3 border-b border-[#e6ddcb]">
                   <button
                     onClick={() => setSide("buy")}
-                    className={`pb-3 text-xl font-semibold transition-colors ${
+                    className={`pb-2 text-lg font-semibold transition-colors ${
                       side === "buy" ? "text-red-700 border-b-2 border-red-600" : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
@@ -589,7 +629,7 @@ export default function MarketDetail({ params }) {
                   </button>
                   <button
                     onClick={() => setSide("sell")}
-                    className={`pb-3 text-xl font-semibold transition-colors ${
+                    className={`pb-2 text-lg font-semibold transition-colors ${
                       side === "sell" ? "text-red-700 border-b-2 border-red-600" : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
@@ -598,14 +638,14 @@ export default function MarketDetail({ params }) {
                 </div>
 
                 {/* Options */}
-                <div className="grid grid-cols-2 gap-3 mt-6">
-                  <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  <div className="flex flex-col gap-1">
                     <button
                       onClick={() => {
                         const target = yesOption || selectedOption || optionsSorted[0]
                         selectOption(target, "yes")
                       }}
-                      className={`h-16 rounded-xl text-2xl font-semibold transition-all ${
+                      className={`h-14 rounded-xl text-xl font-semibold transition-all ${
                         outcomeAction === "yes"
                           ? "bg-emerald-700 text-white shadow-sm"
                           : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
@@ -615,7 +655,7 @@ export default function MarketDetail({ params }) {
                     </button>
                     {side === "sell" && yesOption && userSharesForOption(yesOption) > 0 && (
                       <div
-                        className={`text-center text-sm ${
+                        className={`text-center text-xs ${
                           outcomeAction === "yes" ? "text-emerald-700" : "text-slate-600"
                         }`}
                       >
@@ -623,13 +663,13 @@ export default function MarketDetail({ params }) {
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
                     <button
                       onClick={() => {
                         const target = noOption || selectedOption || optionsSorted[1] || optionsSorted[0]
                         selectOption(target, "no")
                       }}
-                      className={`h-16 rounded-xl text-2xl font-semibold transition-all ${
+                      className={`h-14 rounded-xl text-xl font-semibold transition-all ${
                         outcomeAction === "no"
                           ? "bg-red-700 text-white shadow-sm"
                           : "bg-red-100 text-red-800 hover:bg-red-200"
@@ -639,7 +679,7 @@ export default function MarketDetail({ params }) {
                     </button>
                     {side === "sell" && noOption && userSharesForOption(noOption) > 0 && (
                       <div
-                        className={`text-center text-sm ${
+                        className={`text-center text-xs ${
                           outcomeAction === "no" ? "text-red-700" : "text-slate-600"
                         }`}
                       >
@@ -650,12 +690,12 @@ export default function MarketDetail({ params }) {
                 </div>
 
                 {/* Amount */}
-                <div className="mt-8 space-y-3">
-                  <div className="text-slate-900 text-2xl font-semibold">{side === "buy" ? "Amount" : "Shares"}</div>
+                <div className="mt-4 space-y-2">
+                  <div className="text-slate-900 text-lg font-semibold">{side === "buy" ? "Amount" : "Shares"}</div>
 
                   <div className="relative">
                     {side === "buy" && (
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-4xl text-slate-400">$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-3xl text-slate-400">$</span>
                     )}
                     <input
                       type="number"
@@ -680,19 +720,19 @@ export default function MarketDetail({ params }) {
                       setAmount(limited)
                     }}
                       placeholder={side === "buy" ? "$0" : "0"}
-                      className={`w-full bg-white border border-[#e6ddcb] rounded-xl px-4 py-4 text-right text-5xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/70 ${
-                        side === "buy" ? "pl-12" : "pl-4"
+                      className={`w-full bg-white border border-[#e6ddcb] rounded-xl px-3 py-3 text-right text-4xl font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/70 ${
+                        side === "buy" ? "pl-10" : "pl-3"
                       }`}
                     />
                   </div>
 
                   {side === "buy" ? (
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-4 gap-2">
                       {[1, 20, 100].map((val) => (
                         <button
                           key={val}
                           onClick={() => handleAmountPreset(val)}
-                          className="h-12 rounded-lg bg-white border border-[#e6ddcb] text-slate-900 text-lg font-semibold hover:bg-rose-50 transition-colors"
+                          className="h-10 rounded-lg bg-white border border-[#e6ddcb] text-slate-900 text-base font-semibold hover:bg-rose-50 transition-colors"
                         >
                           +${val}
                         </button>
@@ -702,13 +742,13 @@ export default function MarketDetail({ params }) {
                             balance?.available_amount &&
                             setAmount(Math.max(Number(balance.available_amount), 0).toFixed(2))
                           }
-                          className="h-12 rounded-lg bg-white border border-[#e6ddcb] text-slate-900 text-lg font-semibold hover:bg-rose-50 transition-colors"
+                          className="h-10 rounded-lg bg-white border border-[#e6ddcb] text-slate-900 text-base font-semibold hover:bg-rose-50 transition-colors"
                       >
                         Max
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                       {[25, 50].map((pct) => {
                         const currentShares = userSharesForOption(selectedOption)
                         const pctShares = currentShares * pct / 100
@@ -717,7 +757,7 @@ export default function MarketDetail({ params }) {
                             key={pct}
                             onClick={() => setAmount(pctShares.toFixed(2))}
                             disabled={currentShares <= 0}
-                            className={`h-12 rounded-lg text-lg font-semibold transition-colors ${
+                            className={`h-10 rounded-lg text-base font-semibold transition-colors ${
                               currentShares > 0
                                 ? "bg-white border border-[#e6ddcb] text-slate-900 hover:bg-rose-50"
                                 : "bg-slate-200 text-slate-500 cursor-not-allowed"
@@ -733,7 +773,7 @@ export default function MarketDetail({ params }) {
                           setAmount(currentShares.toFixed(8))
                         }}
                         disabled={userSharesForOption(selectedOption) <= 0}
-                        className={`h-12 rounded-lg text-lg font-semibold transition-colors ${
+                        className={`h-10 rounded-lg text-base font-semibold transition-colors ${
                           userSharesForOption(selectedOption) > 0
                             ? "bg-white border border-[#e6ddcb] text-slate-900 hover:bg-rose-50"
                             : "bg-slate-200 text-slate-500 cursor-not-allowed"
@@ -745,20 +785,20 @@ export default function MarketDetail({ params }) {
                   )}
                 </div>
 
-                {error && <div className="text-red-600 mt-4 text-sm">{error}</div>}
-                {success && <div className="text-emerald-700 mt-4 text-sm">{success}</div>}
+                {error && <div className="text-red-600 mt-3 text-sm">{error}</div>}
+                {success && <div className="text-emerald-700 mt-3 text-sm">{success}</div>}
 
                 {amountNum > 0 && actionPrice > 0 && (
-                  <div className="mt-6 border-t border-[#e6ddcb] pt-4">
-                    <div className="flex items-center justify-between text-lg text-slate-800">
-                      <span className="flex items-center gap-2">
+                  <div className="mt-4 border-t border-[#e6ddcb] pt-3">
+                    <div className="flex items-center justify-between text-base text-slate-800">
+                      <span className="flex items-center gap-1">
                         {summaryTitle} <span role="img" aria-label="money">💵</span>
                       </span>
-                      <span className="text-3xl font-semibold text-emerald-700">
+                      <span className="text-2xl font-semibold text-emerald-700">
                         {summaryValueLabel}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-600 mt-2">
+                    <div className="flex items-center gap-2 text-xs text-slate-600 mt-1">
                       <span>{summarySubLabel}</span>
                     </div>
                   </div>
@@ -767,7 +807,7 @@ export default function MarketDetail({ params }) {
                 <button
                   onClick={handlePlaceOrder}
                   disabled={placing}
-                  className="w-full mt-6 py-4 text-white text-xl font-semibold rounded-xl transition-colors shadow-sm bg-[#4b6ea9] hover:bg-[#3f5e9c] disabled:bg-[#c9d4ea] disabled:text-[#3f5e9c] disabled:cursor-not-allowed"
+                  className="w-full mt-4 py-3 text-white text-lg font-semibold rounded-xl transition-colors shadow-sm bg-[#4b6ea9] hover:bg-[#3f5e9c] disabled:bg-[#c9d4ea] disabled:text-[#3f5e9c] disabled:cursor-not-allowed"
                 >
                   {placing ? "Submitting..." : `${side === "buy" ? "Buy" : "Sell"} ${actionLabel} ${selectedLabel}`}
                 </button>

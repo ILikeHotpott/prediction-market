@@ -132,6 +132,7 @@ def _build_buy_response(*, result: dict, market_id, token: str) -> dict:
         "avg_price_bps": avg_price_bps,
         "pre_prob_bps": result.get("pre_prob_bps"),
         "post_prob_bps": result.get("post_prob_bps"),
+        "option_ids": result.get("option_ids"),
     }
 
 
@@ -188,6 +189,7 @@ def _build_sell_response(*, result: dict, market_id, token: str) -> dict:
         "avg_price_bps": avg_price_bps,
         "pre_prob_bps": result.get("pre_prob_bps"),
         "post_prob_bps": result.get("post_prob_bps"),
+        "option_ids": result.get("option_ids"),
     }
 
 

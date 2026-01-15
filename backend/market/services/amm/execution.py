@@ -136,18 +136,26 @@ def _lock_pool_state(market_id: str) -> Tuple[AmmPool, List[AmmPoolOptionState],
 def _lock_market_and_option(market_id: str, option_id: Optional[str], option_index: Optional[int]):
     now = timezone.now()
 
+    # FIX: Lock Event BEFORE Market to prevent deadlocks in exclusive events
+    # First, get market without lock to check if it has an event
     try:
-        # Lock only the Market table, not the Event (to avoid FOR UPDATE on nullable outer join)
+        market_check = Market.objects.only('id', 'event_id').get(pk=market_id)
+    except Market.DoesNotExist:
+        raise ExecutionError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
+
+    # Lock Event first if it exists (consistent ordering for exclusive events)
+    event = None
+    if market_check.event_id:
+        event = Event.objects.select_for_update().filter(pk=market_check.event_id).first()
+        if event and (event.status != "active" or event.is_hidden):
+            raise ExecutionError("Event is not active", code="EVENT_NOT_ACTIVE", http_status=400)
+
+    # Now lock Market (after Event is locked)
+    try:
         market = Market.objects.select_for_update().get(pk=market_id)
     except Market.DoesNotExist:
         raise ExecutionError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
 
-    # FIX: Lock Event row when checking status to prevent race condition
-    event = None
-    if market.event_id:
-        event = Event.objects.select_for_update().filter(pk=market.event_id).first()
-    if event and (event.status != "active" or event.is_hidden):
-        raise ExecutionError("Event is not active", code="EVENT_NOT_ACTIVE", http_status=400)
     if market.status != "active" or market.is_hidden:
         raise ExecutionError("Market is not active", code="MARKET_NOT_ACTIVE", http_status=400)
 
@@ -368,30 +376,30 @@ def _record_price_series(option_states: List[AmmPoolOptionState], prob_bps: List
     Record price history to market_option_series table after a trade.
     Each trade creates a new data point with exact timestamp (microsecond precision).
     If a record already exists for the same (option_id, interval, bucket_start), update it.
+
+    This is best-effort and should never fail the trade.
     """
     try:
         rows = []
         for st, prob in zip(option_states, prob_bps):
+            # Access option fields directly from the already-loaded related object
+            # to avoid triggering additional queries or locks
             opt = st.option
             rows.append(MarketOptionSeries(
                 option_id=opt.id,
                 market_id=opt.market_id,
                 interval="1M",
-                bucket_start=now,  # Use exact trade time with microsecond precision
+                bucket_start=now,
                 value_bps=prob,
                 created_at=now,
             ))
 
         if rows:
-            # Use bulk_create with update_conflicts to handle duplicate timestamps
-            # This ensures we don't lose data when trades happen in the same second
-            MarketOptionSeries.objects.bulk_create(
-                rows,
-                update_conflicts=True,
-                update_fields=["value_bps", "created_at"],
-                unique_fields=["option_id", "interval", "bucket_start"],
-            )
+            # Use bulk_create without update_conflicts to avoid lock contention
+            # If there's a conflict, just skip it - we'll get the next trade's data
+            MarketOptionSeries.objects.bulk_create(rows, ignore_conflicts=True)
     except Exception as e:
+        # Silently ignore all errors - price series is non-critical
         logger.warning("Failed to record price series: %s", e)
 
 

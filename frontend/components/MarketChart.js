@@ -1,24 +1,86 @@
 "use client"
 
-import { useEffect, useMemo, useState, useRef, useCallback, memo } from "react"
-import { createChart, ColorType, LineSeries, LineType } from "lightweight-charts"
+import { useEffect, useState, useMemo } from "react"
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 
-const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+const API = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+const INTERVALS = ["1H", "6H", "1D", "1W", "ALL"]
+const COLORS = ["#3b82f6", "#ea580c", "#16a34a", "#9333ea", "#ca8a04", "#dc2626"]
 
-const INTERVALS = [
-  { key: "1M", label: "1M", hours: 1/60 },
-  { key: "1H", label: "1H", hours: 1 },
-  { key: "4H", label: "4H", hours: 4 },
-  { key: "1D", label: "1D", hours: 24 },
-  { key: "1W", label: "1W", hours: 168 },
-  { key: "ALL", label: "ALL", hours: 720 },
-]
+// Global cache with stale-while-revalidate for instant switching
+const cache = new Map()
+const pending = new Map()
+const timestamps = new Map()
+const STALE_TIME = 120000 // 2 minutes (reduced API calls)
+const MAX_CACHE_SIZE = 100
 
-const COLORS = ["#ea580c", "#2563eb", "#ca8a04", "#16a34a", "#9333ea", "#dc2626"]
+async function fetchData(marketIds, interval, forceRefresh = false) {
+  const key = `${marketIds.sort().join(",")}:${interval}`
+  const now = Date.now()
+  const cached = cache.get(key)
+  const timestamp = timestamps.get(key)
 
-const normalizeId = (id) => (id != null ? String(id) : null)
+  // Return cached if fresh or if request is pending
+  if (!forceRefresh && cached && timestamp && (now - timestamp < STALE_TIME)) {
+    return cached
+  }
 
-function MarketChart({
+  // Return stale data immediately, fetch in background
+  if (cached && !pending.has(key)) {
+    fetchInBackground(marketIds, interval, key)
+    return cached
+  }
+
+  if (pending.has(key)) return pending.get(key)
+
+  const promise = (async () => {
+    try {
+      const params = new URLSearchParams({ interval })
+      marketIds.forEach(id => params.append("market_ids", id))
+      const res = await fetch(`${API}/api/markets/series/?${params}`, {
+        headers: { 'Accept-Encoding': 'gzip' }
+      })
+      const data = await res.json()
+      const series = data.series || {}
+
+      // LRU cache eviction
+      if (cache.size >= MAX_CACHE_SIZE) {
+        const oldestKey = timestamps.keys().next().value
+        cache.delete(oldestKey)
+        timestamps.delete(oldestKey)
+      }
+
+      cache.set(key, series)
+      timestamps.set(key, Date.now())
+      return series
+    } catch {
+      return cached || {}
+    } finally {
+      pending.delete(key)
+    }
+  })()
+
+  pending.set(key, promise)
+  return promise
+}
+
+function fetchInBackground(marketIds, interval, key) {
+  const promise = (async () => {
+    try {
+      const params = new URLSearchParams({ interval })
+      marketIds.forEach(id => params.append("market_ids", id))
+      const res = await fetch(`${API}/api/markets/series/?${params}`, {
+        headers: { 'Accept-Encoding': 'gzip' }
+      })
+      const data = await res.json()
+      cache.set(key, data.series || {})
+      timestamps.set(key, Date.now())
+    } catch {}
+  })()
+  pending.set(key, promise)
+}
+
+export default function MarketChartRecharts({
   market,
   eventId,
   eventTitle,
@@ -31,307 +93,269 @@ function MarketChart({
   selectedAction,
   refreshTrigger = 0,
 }) {
-  const [interval, setIntervalState] = useState("1H")
-  const [seriesData, setSeriesData] = useState({})
-  const [initialLoading, setInitialLoading] = useState(true)
-  const chartContainerRef = useRef(null)
-  const chartRef = useRef(null)
-  const seriesRef = useRef([])
-  const chartDataRef = useRef([])
-  const fetchControllerRef = useRef(null)
+  const [interval, setInterval] = useState("1H")
+  const [allData, setAllData] = useState({})
+  const [loading, setLoading] = useState(true)
 
-  const isMultiLine = eventType === "exclusive" || eventType === "independent"
-  const effectiveEventId = eventId || market?.event_id
+  const isMulti = eventType === "exclusive" || eventType === "independent"
 
-  // Stable market IDs - only changes when actual IDs change
+  // Memoize sorted markets to avoid re-sorting on every render
+  const sortedMarkets = useMemo(() => {
+    if (!isMulti || !markets.length) return []
+    return [...markets].sort((a, b) => {
+      const aP = a.options?.find(o => o.side === "yes")?.probability_bps || 0
+      const bP = b.options?.find(o => o.side === "yes")?.probability_bps || 0
+      return bP - aP
+    })
+  }, [isMulti, markets])
+
   const marketIds = useMemo(() => {
-    if (isMultiLine && markets.length > 0) {
-      return markets.map((m) => m.id).join(",")
+    if (isMulti) {
+      return sortedMarkets.slice(0, 4).map(m => m.id).filter(Boolean)
     }
-    return market?.id || ""
-  }, [isMultiLine, markets.length > 0 ? markets.map(m => m.id).join(",") : "", market?.id])
+    return market?.id ? [market.id] : []
+  }, [isMulti, sortedMarkets, market?.id])
 
-  // Fetch series data - stable callback that doesn't depend on object references
-  const fetchSeriesData = useCallback(async () => {
-    if (!effectiveEventId || !marketIds) return
-
-    // Cancel previous request
-    if (fetchControllerRef.current) {
-      fetchControllerRef.current.abort()
-    }
-    fetchControllerRef.current = new AbortController()
-
-    try {
-      const params = new URLSearchParams({ interval })
-      marketIds.split(",").forEach((id) => id && params.append("market_ids", id))
-
-      const res = await fetch(`${backendBase}/api/markets/series/?${params}`, {
-        signal: fetchControllerRef.current.signal,
-        cache: "no-store",
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setSeriesData(data.series || {})
-        setInitialLoading(false)
-      }
-    } catch (e) {
-      if (e.name !== "AbortError") {
-        console.error("Failed to fetch series data:", e)
-      }
-    }
-  }, [effectiveEventId, interval, marketIds])
-
-  // Initial fetch and polling - only depends on stable values
+  // Fetch current interval first, then prefetch others
   useEffect(() => {
-    if (!effectiveEventId || !marketIds) return
+    if (!marketIds.length) return
 
-    fetchSeriesData()
-    const pollInterval = interval === "1M" ? 15000 : 60000
-    const timer = setInterval(fetchSeriesData, pollInterval)
+    // Fetch current interval immediately
+    fetchData(marketIds, interval).then(data => {
+      setAllData(prev => ({ ...prev, [interval]: data }))
+      setLoading(false)
+    })
 
-    return () => {
-      clearInterval(timer)
-      if (fetchControllerRef.current) {
-        fetchControllerRef.current.abort()
-      }
-    }
-  }, [effectiveEventId, interval, marketIds, fetchSeriesData])
-
-  // Refresh on trigger (after order)
-  useEffect(() => {
-    if (refreshTrigger > 0) fetchSeriesData()
-  }, [refreshTrigger, fetchSeriesData])
-
-  // Build chart data
-  const { chartData, sortedMarkets } = useMemo(() => {
-    const processPoints = (points, currentProb) => {
-      const now = Math.floor(Date.now() / 1000)
-      if (!points?.length) {
-        return currentProb != null ? [{ time: now, value: currentProb }] : []
-      }
-      const result = []
-      const seen = new Set()
-      for (const p of points) {
-        const time = Math.floor(new Date(p.bucket_start).getTime() / 1000)
-        if (!seen.has(time)) {
-          seen.add(time)
-          result.push({ time, value: p.value_bps / 100 })
-        }
-      }
-      result.sort((a, b) => a.time - b.time)
-      // Extend line to current time with latest value
-      const lastPoint = result[result.length - 1]
-      if (lastPoint && lastPoint.time < now) {
-        result.push({ time: now, value: currentProb ?? lastPoint.value })
-      }
-      return result
-    }
-
-    if (isMultiLine && markets.length > 0) {
-      const sorted = [...markets].sort((a, b) => {
-        const aProb = a.options?.find((o) => o.side === "yes")?.probability_bps || 0
-        const bProb = b.options?.find((o) => o.side === "yes")?.probability_bps || 0
-        return bProb - aProb
+    // Prefetch other intervals after 100ms
+    const timer = setTimeout(() => {
+      INTERVALS.filter(int => int !== interval).forEach(int => {
+        fetchData(marketIds, int).then(data => {
+          setAllData(prev => ({ ...prev, [int]: data }))
+        })
       })
+    }, 100)
 
-      const allData = sorted.map((m, idx) => {
-        const yesOption = m.options?.find((o) => o.side === "yes") || m.options?.[0]
-        const optionId = yesOption?.id?.toString()
-        const currentProb = yesOption?.probability_bps ? yesOption.probability_bps / 100 : null
+    return () => clearTimeout(timer)
+  }, [marketIds.join(","), refreshTrigger])
+
+  // When interval changes, use cached data or fetch
+  useEffect(() => {
+    if (!marketIds.length) return
+    if (allData[interval]) return // Already have data
+
+    fetchData(marketIds, interval).then(data => {
+      setAllData(prev => ({ ...prev, [interval]: data }))
+    })
+  }, [interval, marketIds.join(",")])
+
+  const chartData = useMemo(() => {
+    const series = allData[interval] || {}
+
+    if (isMulti && sortedMarkets.length) {
+      const lines = sortedMarkets.slice(0, 4).map((m, i) => {
+        const opt = m.options?.find(o => o.side === "yes") || m.options?.[0]
         return {
           id: m.id,
-          optionId,
           label: m.bucket_label || m.title,
-          color: COLORS[idx % COLORS.length],
-          points: processPoints(seriesData[optionId], currentProb),
-          currentProb,
+          color: COLORS[i],
+          optionId: opt?.id,
+          prob: opt?.probability_bps ? opt.probability_bps / 100 : null,
         }
       })
-      return { chartData: allData.slice(0, 4), sortedMarkets: sorted }
-    }
 
-    const yesOption = market?.options?.find((o) => o.side === "yes") || market?.options?.[0]
-    const optionId = yesOption?.id?.toString()
-    const currentProb = yesOption?.probability_bps ? yesOption.probability_bps / 100 : null
-    return {
-      chartData: [{
-        id: market?.id,
-        optionId,
-        label: "Yes",
-        color: COLORS[0],
-        points: processPoints(seriesData[optionId], currentProb),
-        currentProb,
-      }],
-      sortedMarkets: markets,
-    }
-  }, [market, markets, seriesData, isMultiLine])
+      // Find global min/max timestamps
+      let minTime = Infinity
+      let maxTime = -Infinity
+      const lineData = {}
 
-  const priceChange = useMemo(() => {
-    const pts = chartData[0]?.points
-    if (!pts || pts.length < 2) return null
-    return pts[pts.length - 1].value - pts[0].value
-  }, [chartData])
-
-  // Initialize chart once
-  useEffect(() => {
-    if (!chartContainerRef.current) return
-
-    const getTimeScaleOptions = () => {
-      const base = { borderColor: "#e6ddcb", fixLeftEdge: true, fixRightEdge: true }
-      if (interval === "1M") {
-        return { ...base, timeVisible: true, secondsVisible: true }
-      } else if (interval === "1H" || interval === "4H" || interval === "1D") {
-        return { ...base, timeVisible: true, secondsVisible: false }
-      }
-      return { ...base, timeVisible: false, secondsVisible: false }
-    }
-
-    const chart = createChart(chartContainerRef.current, {
-      layout: { background: { type: ColorType.Solid, color: "#f9f6ee" }, textColor: "#64748b", attributionLogo: false },
-      grid: { vertLines: { color: "#e6ddcb", style: 1 }, horzLines: { color: "#e6ddcb", style: 1 } },
-      width: chartContainerRef.current.clientWidth,
-      height: 280,
-      rightPriceScale: { borderColor: "#e6ddcb", scaleMargins: { top: 0.1, bottom: 0.1 } },
-      timeScale: getTimeScaleOptions(),
-      crosshair: { mode: 1, vertLine: { color: "#4b6ea9", width: 1, style: 2 }, horzLine: { color: "#4b6ea9", width: 1, style: 2 } },
-      handleScroll: { mouseWheel: false, pressedMouseMove: true },
-      handleScale: { mouseWheel: false, pinch: false },
-    })
-
-    chartRef.current = chart
-
-    const handleResize = () => {
-      if (chartContainerRef.current) chart.applyOptions({ width: chartContainerRef.current.clientWidth })
-    }
-    window.addEventListener("resize", handleResize)
-
-    return () => {
-      window.removeEventListener("resize", handleResize)
-      chart.remove()
-      chartRef.current = null
-      seriesRef.current = []
-    }
-  }, [interval])
-
-  // Update series data efficiently
-  useEffect(() => {
-    if (!chartRef.current) return
-    chartDataRef.current = chartData
-
-    // Remove old series
-    seriesRef.current.forEach((s) => { try { chartRef.current.removeSeries(s) } catch {} })
-    seriesRef.current = []
-
-    // Add new series
-    chartData.forEach((line) => {
-      if (!line.points.length) return
-      const series = chartRef.current.addSeries(LineSeries, {
-        color: line.color,
-        lineWidth: 2,
-        lineType: LineType.Curved,
-        priceFormat: { type: "custom", formatter: (p) => `${p.toFixed(1)}%` },
+      lines.forEach(line => {
+        const raw = series[line.optionId] || []
+        lineData[line.label] = raw
+        raw.forEach(p => {
+          const time = new Date(p.bucket_start).getTime()
+          if (time < minTime) minTime = time
+          if (time > maxTime) maxTime = time
+        })
       })
-      series.setData(line.points)
-      seriesRef.current.push(series)
-    })
 
-    chartRef.current.timeScale().fitContent()
-  }, [chartData])
+      // Build points with anchor values
+      const points = {}
+      lines.forEach(line => {
+        const raw = lineData[line.label]
 
-  const currentProb = chartData[0]?.currentProb
+        // Get first and last values for anchoring
+        const firstVal = raw.length > 0 ? raw[0].value_bps / 100 : line.prob
+        const lastVal = raw.length > 0 ? raw[raw.length - 1].value_bps / 100 : line.prob
+
+        // Add anchor at minTime if this line doesn't have data there
+        if (raw.length > 0 && firstVal != null) {
+          const firstTime = new Date(raw[0].bucket_start).getTime()
+          if (firstTime > minTime) {
+            if (!points[minTime]) points[minTime] = { time: minTime }
+            points[minTime][line.label] = firstVal
+          }
+        }
+
+        // Add all actual data points
+        raw.forEach(p => {
+          const time = new Date(p.bucket_start).getTime()
+          if (!points[time]) points[time] = { time }
+          points[time][line.label] = p.value_bps / 100
+        })
+
+        // Add anchor at maxTime if this line doesn't have data there
+        if (raw.length > 0 && lastVal != null) {
+          const lastTime = new Date(raw[raw.length - 1].bucket_start).getTime()
+          if (lastTime < maxTime) {
+            if (!points[maxTime]) points[maxTime] = { time: maxTime }
+            points[maxTime][line.label] = lastVal
+          }
+        }
+      })
+
+      return { lines, points: Object.values(points).sort((a, b) => a.time - b.time) }
+    }
+
+    const opt = market?.options?.find(o => o.side === "yes") || market?.options?.[0]
+    const raw = series[opt?.id] || []
+    const points = raw.map(p => ({
+      time: new Date(p.bucket_start).getTime(),
+      value: p.value_bps / 100
+    }))
+
+    return {
+      lines: [{ id: market?.id, label: "Yes", color: COLORS[0], prob: opt?.probability_bps ? opt.probability_bps / 100 : null }],
+      points
+    }
+  }, [allData, interval, market, sortedMarkets, isMulti])
+
+  const prob = chartData.lines[0]?.prob ?? chartData.points?.at(-1)?.value
+
+  if (loading) {
+    return (
+      <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
+        <div className="h-8 w-64 bg-[#e6ddcb] rounded animate-pulse mb-2" />
+        <div className="h-12 w-24 bg-[#e6ddcb] rounded animate-pulse mb-4" />
+        <div className="h-[300px] bg-[#e6ddcb]/50 rounded animate-pulse" />
+      </div>
+    )
+  }
 
   return (
-    <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] shadow-md overflow-hidden">
-      {/* Header */}
+    <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] overflow-hidden">
       <div className="px-6 pt-5 pb-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-3">
-            {coverUrl && <img src={coverUrl} alt="" className="w-18 h-18 rounded-md object-cover flex-shrink-0" />}
-            <h2 className="text-2xl font-bold text-slate-900">{eventTitle || market?.title}</h2>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-slate-500">
-            {market?.resolution_deadline && (
-              <span className="flex items-center gap-1">
-                <span>⏱</span>
-                {new Date(market.resolution_deadline).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
-              </span>
-            )}
-          </div>
+        <div className="flex items-center gap-3 mb-2">
+          {coverUrl && <img src={coverUrl} alt="" className="w-12 h-12 rounded-lg object-cover" />}
+          <h2 className="text-xl font-bold text-slate-900">{eventTitle || market?.title}</h2>
         </div>
         <div className="flex items-baseline gap-3">
-          <span className="text-4xl font-bold text-[#4b6ea9]">{currentProb != null ? `${currentProb.toFixed(0)}%` : "—"}</span>
-          <span className="text-lg text-slate-500">chance</span>
-          {priceChange != null && (
-            <span className={`text-sm font-medium ${priceChange >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-              {priceChange >= 0 ? "▲" : "▼"} {Math.abs(priceChange).toFixed(1)}%
-            </span>
-          )}
+          <span className="text-4xl font-bold text-slate-900">{prob != null ? `${prob.toFixed(0)}%` : "—"}</span>
+          <span className="text-lg text-slate-600">chance</span>
         </div>
       </div>
 
-      {/* Legend */}
-      {isMultiLine && chartData.length > 1 && (
+      {isMulti && chartData.lines.length > 1 && (
         <div className="px-6 pb-3 flex flex-wrap gap-4 text-sm">
-          {chartData.map((line) => (
-            <button key={line.id} onClick={() => onSelectMarket?.(markets.find((m) => m.id === line.id))} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          {chartData.lines.map(line => (
+            <button key={line.id} onClick={() => onSelectMarket?.(markets.find(m => m.id === line.id))} className="flex items-center gap-2 hover:opacity-80">
               <span className="w-3 h-3 rounded-full" style={{ backgroundColor: line.color }} />
               <span className="text-slate-700">{line.label}</span>
-              {line.currentProb != null && <span className="text-slate-500">({line.currentProb.toFixed(0)}%)</span>}
+              {line.prob != null && <span className="text-slate-500">({line.prob.toFixed(0)}%)</span>}
             </button>
           ))}
         </div>
       )}
 
-      {/* Chart */}
-      <div className="relative px-2">
-        {initialLoading && <div className="absolute inset-0 bg-[#f9f6ee]/80 z-10 flex items-center justify-center"><div className="w-8 h-8 border-2 border-[#4b6ea9] border-t-transparent rounded-full animate-spin" /></div>}
-        <div ref={chartContainerRef} />
+      <div className="px-2 pb-4">
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={chartData.points}>
+            <XAxis
+              dataKey="time"
+              type="number"
+              domain={['dataMin', 'dataMax']}
+              scale="time"
+              stroke="#94a3b8"
+              tickFormatter={(t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            />
+            <YAxis
+              stroke="#94a3b8"
+              domain={['dataMin - 5', 'dataMax + 5']}
+              tickFormatter={(v) => `${v.toFixed(0)}%`}
+            />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e6ddcb', borderRadius: '8px' }}
+              labelStyle={{ color: '#475569' }}
+              formatter={(v, name) => [`${v.toFixed(1)}%`, name]}
+              labelFormatter={(t) => new Date(t).toLocaleString()}
+            />
+            {chartData.lines.length === 1 ? (
+              <Line type="monotone" dataKey="value" stroke={chartData.lines[0].color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
+            ) : (
+              chartData.lines.map(line => (
+                <Line key={line.id} type="monotone" dataKey={line.label} stroke={line.color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
+              ))
+            )}
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
-      {/* Interval selector */}
-      <div className="px-6 py-4 flex items-center justify-between border-t border-[#e6ddcb]">
-        <div className="flex gap-1">
-          {INTERVALS.map((int) => (
-            <button
-              key={int.key}
-              onClick={() => setIntervalState(int.key)}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${interval === int.key ? "bg-[#4b6ea9] text-white" : "text-slate-600 hover:text-slate-900 hover:bg-[#e6ddcb]"}`}
-            >
-              {int.label}
-            </button>
-          ))}
-        </div>
+      <div className="px-6 py-4 flex gap-2 border-t border-[#e6ddcb]">
+        {INTERVALS.map(int => (
+          <button
+            key={int}
+            onClick={() => setInterval(int)}
+            onMouseEnter={() => fetchData(marketIds, int)}
+            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+              interval === int ? "bg-[#4b6ea9] text-white" : "text-slate-600 hover:text-slate-900 hover:bg-[#e6ddcb]"
+            }`}
+          >
+            {int}
+          </button>
+        ))}
       </div>
 
-      {/* Outcome Table */}
-      {!hideOutcomes && isMultiLine && sortedMarkets.length > 0 && (
+      {!hideOutcomes && isMulti && markets.length > 0 && (
         <div className="border-t border-[#e6ddcb] px-6 py-4">
-          <div className="flex items-center justify-between mb-3 text-xs text-slate-500 uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-3 text-xs text-slate-600 uppercase">
             <span>Outcome</span>
             <span>Chance</span>
           </div>
           <div className="space-y-2">
-            {sortedMarkets.map((m, idx) => {
-              const yesOption = m.options?.find((o) => o.side === "yes") || m.options?.[0]
-              const probability = yesOption?.probability_bps != null ? Math.round(yesOption.probability_bps / 100) : 0
-              const yesPrice = yesOption?.probability_bps != null ? `${(yesOption.probability_bps / 100).toFixed(1)}¢` : "—"
-              const noPrice = yesOption?.probability_bps != null ? `${((10000 - yesOption.probability_bps) / 100).toFixed(1)}¢` : "—"
-              const isSelected = normalizeId(m.id) === normalizeId(selectedOptionId)
-              const yesActive = isSelected && selectedAction === "yes"
-              const noActive = isSelected && selectedAction === "no"
-              const showColor = idx < 4
+            {sortedMarkets.map((m, i) => {
+              const opt = m.options?.find(o => o.side === "yes") || m.options?.[0]
+              const p = opt?.probability_bps != null ? opt.probability_bps / 100 : 0
+              const pDisp = p > 0 && p < 1 ? "<1" : Math.round(p)
+              const yPrice = opt?.probability_bps != null ? `${(opt.probability_bps / 100).toFixed(1)}¢` : "—"
+              const nPrice = opt?.probability_bps != null ? `${((10000 - opt.probability_bps) / 100).toFixed(1)}¢` : "—"
+              const sel = String(m.id) === String(selectedOptionId)
+              const yAct = sel && selectedAction === "yes"
+              const nAct = sel && selectedAction === "no"
 
               return (
                 <div key={m.id} className="flex items-center justify-between py-2 border-b border-[#e6ddcb] last:border-0">
                   <div className="flex items-center gap-3">
-                    {showColor ? <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} /> : <div className="w-2.5 h-2.5" />}
-                    <span className="text-slate-800 font-medium text-lg">{m.bucket_label || m.title}</span>
+                    {i < 4 && <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i] }} />}
+                    <span className="text-slate-900 font-medium">{m.bucket_label || m.title}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-slate-800 font-semibold text-xl w-16 text-right">{probability}%</span>
+                    <span className="text-slate-900 font-semibold w-14 text-right">{pDisp}%</span>
                     <div className="flex gap-2">
-                      <button onClick={() => onSelectMarket?.(m, "yes")} className={`w-28 py-2 text-base font-medium rounded-lg transition-colors ${yesActive ? "bg-emerald-700 text-white" : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"}`}>Yes {yesPrice}</button>
-                      <button onClick={() => onSelectMarket?.(m, "no")} className={`w-28 py-2 text-base font-medium rounded-lg transition-colors ${noActive ? "bg-red-700 text-white" : "bg-red-100 text-red-700 hover:bg-red-200"}`}>No {noPrice}</button>
+                      <button
+                        onClick={() => onSelectMarket?.(m, "yes")}
+                        className={`w-24 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                          yAct ? "bg-emerald-700 text-white" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                        }`}
+                      >
+                        Yes {yPrice}
+                      </button>
+                      <button
+                        onClick={() => onSelectMarket?.(m, "no")}
+                        className={`w-24 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                          nAct ? "bg-red-700 text-white" : "bg-red-100 text-red-800 hover:bg-red-200"
+                        }`}
+                      >
+                        No {nPrice}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -343,5 +367,3 @@ function MarketChart({
     </div>
   )
 }
-
-export default memo(MarketChart)

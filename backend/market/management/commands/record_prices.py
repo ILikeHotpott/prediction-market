@@ -1,100 +1,57 @@
 """
-Django management command for series data maintenance.
-Price recording now happens automatically on each trade (in execution.py).
-
-Usage:
-    python manage.py record_prices --cleanup
-    python manage.py record_prices --backfill
+Management command to record current market prices.
+Run this every 5 minutes via cron to build historical price data.
+Only records when prices change to save database space and bandwidth.
 """
-
 from django.core.management.base import BaseCommand
-from django.db import transaction
-
-from market.models import Trade, MarketOption, MarketOptionSeries
-from market.services.series_recorder import cleanup_old_series
+from django.utils import timezone
+from django.db.models import Q
+from market.models import MarketOption, MarketOptionStats, MarketOptionSeries
 
 
 class Command(BaseCommand):
-    help = 'Maintain market price series data (cleanup or backfill)'
+    help = 'Record current market prices for active options (only when changed)'
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--cleanup',
+            '--force',
             action='store_true',
-            help='Clean up old series data'
-        )
-        parser.add_argument(
-            '--cleanup-days',
-            type=int,
-            default=30,
-            help='Days of data to keep when cleaning up (default: 30)'
-        )
-        parser.add_argument(
-            '--backfill',
-            action='store_true',
-            help='Rebuild series data from trades table'
+            help='Force record all prices even if unchanged',
         )
 
     def handle(self, *args, **options):
-        cleanup = options['cleanup']
-        cleanup_days = options['cleanup_days']
-        backfill = options['backfill']
+        now = timezone.now()
+        force = options.get('force', False)
 
-        if cleanup:
-            deleted = cleanup_old_series(cleanup_days)
-            self.stdout.write(self.style.SUCCESS(f'Cleaned up {deleted} old series records'))
-        elif backfill:
-            self._backfill_from_trades()
-        else:
-            self.stdout.write(
-                'Price recording now happens automatically on each trade.\n'
-                'Use --cleanup to remove old series data.\n'
-                'Use --backfill to rebuild series data from trades.'
-            )
+        # Get all active yes options with their current prices
+        stats = MarketOptionStats.objects.filter(
+            option__is_active=True,
+            option__side="yes"
+        ).select_related('option__market')
 
-    def _backfill_from_trades(self):
-        """Rebuild series data from trades table using price_bps from each trade."""
-        self.stdout.write('Starting backfill from trades...')
+        rows = []
+        for stat in stats:
+            # Get last recorded price for this option
+            if not force:
+                last_record = MarketOptionSeries.objects.filter(
+                    option_id=stat.option_id,
+                    interval="5M"
+                ).order_by('-bucket_start').first()
 
-        # Clear existing series data
-        deleted, _ = MarketOptionSeries.objects.all().delete()
-        self.stdout.write(f'Deleted {deleted} existing series records')
+                # Skip if price hasn't changed
+                if last_record and last_record.value_bps == stat.prob_bps:
+                    continue
 
-        # Get all trades with price_bps, ordered by time
-        trades = Trade.objects.filter(
-            price_bps__isnull=False
-        ).select_related('option').order_by('block_time')
-
-        total = trades.count()
-        self.stdout.write(f'Processing {total} trades with price data...')
-
-        series_to_create = []
-        for i, trade in enumerate(trades.iterator()):
-            option = trade.option
-            if not option or option.side != 'yes':
-                continue
-
-            series_to_create.append(MarketOptionSeries(
-                option_id=option.id,
-                market_id=option.market_id,
-                interval="1M",
-                bucket_start=trade.block_time,
-                value_bps=trade.price_bps,
-                created_at=trade.block_time,
+            rows.append(MarketOptionSeries(
+                option_id=stat.option_id,
+                market_id=stat.option.market_id,
+                interval="5M",  # Changed from 1M to 5M
+                bucket_start=now,
+                value_bps=stat.prob_bps,
             ))
 
-            if (i + 1) % 100 == 0:
-                self.stdout.write(f'Processed {i + 1}/{total} trades...')
-
-        # Bulk create all series entries
-        if series_to_create:
-            with transaction.atomic():
-                MarketOptionSeries.objects.bulk_create(
-                    series_to_create,
-                    update_conflicts=True,
-                    update_fields=["value_bps", "created_at"],
-                    unique_fields=["option_id", "interval", "bucket_start"],
-                )
-            self.stdout.write(self.style.SUCCESS(f'Created {len(series_to_create)} series records'))
+        if rows:
+            MarketOptionSeries.objects.bulk_create(rows, ignore_conflicts=True)
+            self.stdout.write(f"Recorded {len(rows)} price points (skipped {len(list(stats)) - len(rows)} unchanged)")
         else:
-            self.stdout.write(self.style.WARNING('No series records to create'))
+            self.stdout.write("No price changes detected")
