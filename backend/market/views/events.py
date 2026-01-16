@@ -33,6 +33,46 @@ def _index_event_async(event_data: dict):
         logger.warning("Failed to index event %s: %s", event_data.get("id"), e)
 
 
+def _reindex_all_events_async():
+    """Reindex all events to meilisearch (fire and forget)."""
+    try:
+        from ..services.search import index_events
+        events = Event.objects.filter(is_hidden=False).select_related("primary_market")
+        docs = []
+        for event in events:
+            market = event.primary_market
+            volume = 0
+            outcomes = []
+            if market:
+                stats = MarketOptionStats.objects.filter(market_id=market.id)
+                volume = sum(float(s.volume_total or 0) for s in stats)
+                options = MarketOption.objects.filter(market_id=market.id)
+                for opt in options:
+                    stat = next((s for s in stats if s.option_id == opt.id), None)
+                    outcomes.append({
+                        "id": opt.id,
+                        "name": opt.title,
+                        "probability_bps": stat.prob_bps if stat else 0,
+                    })
+            docs.append({
+                "id": str(event.id),
+                "title": event.title,
+                "description": event.description or "",
+                "category": event.category or "",
+                "status": event.status,
+                "cover_url": event.cover_url,
+                "created_at": event.created_at.timestamp() if event.created_at else 0,
+                "trading_deadline": event.trading_deadline.timestamp() if event.trading_deadline else 0,
+                "volume_total": volume,
+                "market_id": str(market.id) if market else None,
+                "outcomes": outcomes,
+            })
+        index_events(docs)
+        logger.info("Reindexed %d events to meilisearch", len(docs))
+    except Exception as e:
+        logger.warning("Failed to reindex all events: %s", e)
+
+
 def _delete_event_index_async(event_id: str):
     """Delete event from meilisearch index (fire and forget)."""
     try:
@@ -507,7 +547,8 @@ def publish_event(request, event_id):
 
     event = _prefetched_event(event_id)
     event_data = serialize_event(event)
-    _index_event_async(event_data)
+    # Full reindex when event becomes active
+    _reindex_all_events_async()
     # Invalidate caches
     invalidate_on_event_change(str(event_id))
     return JsonResponse(event_data, status=200)
@@ -550,6 +591,9 @@ def update_event_status(request, event_id):
     # Only delete from search index when canceled (resolved events stay visible for 3 days)
     if new_status == "canceled":
         _delete_event_index_async(str(event_id))
+    elif new_status == "active":
+        # Full reindex when event becomes active
+        _reindex_all_events_async()
     else:
         _index_event_async(event_data)
     return JsonResponse(event_data, status=200)
