@@ -103,7 +103,10 @@ class SeriesConsumer(AsyncWebsocketConsumer):
         hours = INTERVAL_HOURS.get(self.interval)
         now = timezone.now()
 
-        qs = MarketOptionSeries.objects.filter(option_id__in=[o.id for o in options])
+        qs = MarketOptionSeries.objects.filter(
+            option_id__in=[o.id for o in options],
+            interval="1M",  # Use index: (option_id, interval, bucket_start)
+        )
         if hours:
             start_time = now - timedelta(hours=hours)
             qs = qs.filter(bucket_start__gte=start_time)
@@ -112,8 +115,8 @@ class SeriesConsumer(AsyncWebsocketConsumer):
             start_time = now - timedelta(days=7)
             qs = qs.filter(bucket_start__gte=start_time)
 
-        # Hard limit: max 2000 points per option to cap response size
-        qs = qs.order_by("option_id", "bucket_start")[:2000]
+        # Hard limit: max 500 points per option to cap response size (A1 optimization)
+        qs = qs.order_by("option_id", "bucket_start")[:500]
 
         # Group by option_id
         series = {}

@@ -47,6 +47,7 @@ urlpatterns = [
     path("api/markets/", market.list_markets, name="market-list"),
     path("api/markets/create/", market.create_market, name="market-create"),
     path("api/markets/series/", series.get_series, name="market-series"),
+    path("api/markets/series/delta/", series.get_series_delta, name="market-series-delta"),  # A2: incremental fetch
     path("api/markets/<uuid:market_id>/", market.get_market, name="market-detail"),
     path(
         "api/markets/<uuid:market_id>/publish/",
