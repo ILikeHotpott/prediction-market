@@ -22,13 +22,14 @@ CACHE_TTL = {
 }
 
 # Time range for each interval
-# For longer intervals, we use coarser bucket sizes to reduce data points
+# Optimized: reduced max_points to minimize egress (A1 optimization)
+# Frontend should use incremental fetch for real-time updates
 INTERVAL_CONFIG = {
-    "1H": {"hours": 1, "max_points": 60, "bucket_minutes": 1},
-    "6H": {"hours": 6, "max_points": 72, "bucket_minutes": 5},
-    "1D": {"hours": 24, "max_points": 96, "bucket_minutes": 15},
-    "1W": {"hours": 168, "max_points": 168, "bucket_minutes": 60},  # 7 days, hourly buckets
-    "ALL": {"hours": None, "max_points": 300, "bucket_minutes": 240},  # All time, 4-hour buckets
+    "1H": {"hours": 1, "max_points": 60, "bucket_minutes": 1},      # 60 points max
+    "6H": {"hours": 6, "max_points": 72, "bucket_minutes": 5},      # 72 points max
+    "1D": {"hours": 24, "max_points": 96, "bucket_minutes": 15},    # 96 points max
+    "1W": {"hours": 168, "max_points": 120, "bucket_minutes": 60},  # 120 points (was 168)
+    "ALL": {"hours": None, "max_points": 200, "bucket_minutes": 240},  # 200 points (was 300)
 }
 
 
@@ -172,7 +173,7 @@ def _get_option_series(
     # Build query with optimized field selection
     query = MarketOptionSeries.objects.filter(
         option_id=option_id,
-        interval="5M",  # Changed from 1M to 5M
+        interval="1M",
     ).only("bucket_start", "value_bps")
 
     # Apply time filter if start_time is specified
@@ -198,7 +199,7 @@ def _get_option_series(
         last_before = (
             MarketOptionSeries.objects.filter(
                 option_id=option_id,
-                interval="5M",  # Changed from 1M to 5M
+                interval="1M",
                 bucket_start__lt=start_time,
             )
             .values("bucket_start", "value_bps")
@@ -256,3 +257,80 @@ def invalidate_series_cache(market_id: str):
     # We can't easily invalidate all combinations, so we rely on short TTLs
     # For critical updates, consider using cache versioning
     pass
+
+
+def get_series_incremental(market_ids: List[str], after_timestamp: str, limit: int = 100) -> Dict:
+    """
+    Get incremental series data after a specific timestamp (A2 optimization).
+
+    This is much more efficient than full fetch for real-time updates.
+    Frontend should:
+    1. First call: get_series_data() to get initial data
+    2. Subsequent calls: get_series_incremental() with last bucket_start
+
+    Args:
+        market_ids: List of market UUIDs
+        after_timestamp: ISO timestamp string, only return points after this
+        limit: Max points per option (default 100)
+
+    Returns:
+        Dict with new series data keyed by option_id
+    """
+    from datetime import datetime
+
+    if not market_ids:
+        return {"series": {}, "has_more": False}
+
+    # Filter out invalid UUIDs
+    valid_market_ids = [mid for mid in market_ids if _is_valid_uuid(mid)]
+    if not valid_market_ids:
+        return {"series": {}, "has_more": False}
+
+    # Parse timestamp
+    try:
+        if after_timestamp.endswith('Z'):
+            after_timestamp = after_timestamp[:-1] + '+00:00'
+        after_dt = datetime.fromisoformat(after_timestamp)
+    except (ValueError, TypeError):
+        return {"series": {}, "has_more": False, "error": "invalid timestamp"}
+
+    # Limit to reasonable range
+    limit = min(limit, 500)
+
+    # Get Yes options for the markets
+    options = list(
+        MarketOption.objects.filter(
+            market_id__in=valid_market_ids,
+            side="yes",
+            is_active=True,
+        ).values_list("id", flat=True)
+    )
+
+    if not options:
+        return {"series": {}, "has_more": False}
+
+    # Query new points after timestamp (uses index: option_id, interval, bucket_start)
+    rows = MarketOptionSeries.objects.filter(
+        option_id__in=options,
+        interval="1M",
+        bucket_start__gt=after_dt,
+    ).values("option_id", "bucket_start", "value_bps").order_by("bucket_start")[:limit + 1]
+
+    rows = list(rows)
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+
+    # Group by option_id
+    series = {}
+    for row in rows:
+        opt_id = str(row["option_id"])
+        if opt_id not in series:
+            series[opt_id] = []
+        series[opt_id].append({
+            "bucket_start": row["bucket_start"].isoformat(),
+            "value_bps": row["value_bps"],
+        })
+
+    return {"series": series, "has_more": has_more}
+

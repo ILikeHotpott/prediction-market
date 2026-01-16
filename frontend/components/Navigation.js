@@ -1,20 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, Menu, X, User, Trophy, Bookmark, LogOut } from "lucide-react";
+import { Bell, Menu, X, User, Trophy, Bookmark, LogOut, Wallet } from "lucide-react";
 import SearchDropdown from "@/components/SearchDropdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { usePortfolio } from "@/components/PortfolioProvider";
 import Logo from "@/components/Logo";
@@ -40,7 +33,41 @@ function prefetchCategory(categoryValue) {
 export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [depositModalOpen, setDepositModalOpen] = useState(false);
+  const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const hoverTimeoutRef = useRef(null);
   const { theme, setTheme } = useTheme();
+
+  const handleMouseEnter = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => setAvatarDropdownOpen(true), 100);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => setAvatarDropdownOpen(false), 150);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setAvatarDropdownOpen(false);
+      }
+    };
+    if (avatarDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [avatarDropdownOpen]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
+
   const { user, session, openAuthModal, signOut } = useAuth();
   const { portfolio: navPortfolio, cash: navCash, loading: navLoading, avatarUrl: profileAvatarUrl, refreshPortfolio } = usePortfolio();
   const router = useRouter();
@@ -132,54 +159,76 @@ export default function Navigation() {
                   </Button>
                   <Bell className="w-6 h-6 text-muted-foreground cursor-pointer hover:text-accent transition-colors" />
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="w-10 h-10 rounded-full bg-white/10 border-2 border-white/20 cursor-pointer overflow-hidden flex items-center justify-center hover:border-accent transition-colors focus:outline-none focus:ring-2 focus:ring-accent">
-                        {avatarUrl ? (
-                          <img
-                            src={avatarUrl}
-                            alt="User"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-white font-bold font-display">
-                            {displayName.charAt(0)}
-                          </span>
-                        )}
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-56 rounded-sm shadow-xl border border-[#e6ddcb] bg-[#f9f6ee] text-gray-700"
+                  {/* Custom hover dropdown - no flickering */}
+                  <div
+                    ref={dropdownRef}
+                    className="relative"
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                  >
+                    <button
+                      className="w-10 h-10 rounded-full bg-white/10 border-2 border-white/20 cursor-pointer overflow-hidden flex items-center justify-center hover:border-accent transition-colors focus:outline-none focus:ring-2 focus:ring-accent"
                     >
-                      <DropdownMenuItem asChild>
-                        <Link href="/profile" className="flex items-center gap-3 cursor-pointer">
-                          <User className="w-4 h-4" />
-                          <span className="font-medium">Profile</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/leaderboard" className="flex items-center gap-3 cursor-pointer">
-                          <Trophy className="w-4 h-4" />
-                          <span className="font-medium">Leaderboard</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/watchlist" className="flex items-center gap-3 cursor-pointer">
-                          <Bookmark className="w-4 h-4" />
-                          <span className="font-medium">Watchlist</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-[#e6ddcb]" />
-                      <DropdownMenuItem
-                        onClick={signOut}
-                        className="text-red-500 cursor-pointer flex items-center gap-3"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span className="font-medium">Logout</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                      {avatarUrl ? (
+                        <img
+                          src={avatarUrl}
+                          alt="User"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-white font-bold font-display">
+                          {displayName.charAt(0)}
+                        </span>
+                      )}
+                    </button>
+
+                    {avatarDropdownOpen && (
+                      <div className="absolute right-0 top-full pt-2 z-50">
+                        <div className="w-56 rounded-sm shadow-xl border border-[#e6ddcb] bg-[#f9f6ee] text-gray-700 py-1">
+                          <Link
+                            href="/portfolio"
+                            className="flex items-center gap-3 px-3 py-2 hover:bg-black/5 cursor-pointer"
+                            onClick={() => setAvatarDropdownOpen(false)}
+                          >
+                            <Wallet className="w-4 h-4" />
+                            <span className="font-medium">Portfolio</span>
+                          </Link>
+                          <Link
+                            href="/profile"
+                            className="flex items-center gap-3 px-3 py-2 hover:bg-black/5 cursor-pointer"
+                            onClick={() => setAvatarDropdownOpen(false)}
+                          >
+                            <User className="w-4 h-4" />
+                            <span className="font-medium">Profile</span>
+                          </Link>
+                          <Link
+                            href="/leaderboard"
+                            className="flex items-center gap-3 px-3 py-2 hover:bg-black/5 cursor-pointer"
+                            onClick={() => setAvatarDropdownOpen(false)}
+                          >
+                            <Trophy className="w-4 h-4" />
+                            <span className="font-medium">Leaderboard</span>
+                          </Link>
+                          <Link
+                            href="/watchlist"
+                            className="flex items-center gap-3 px-3 py-2 hover:bg-black/5 cursor-pointer"
+                            onClick={() => setAvatarDropdownOpen(false)}
+                          >
+                            <Bookmark className="w-4 h-4" />
+                            <span className="font-medium">Watchlist</span>
+                          </Link>
+                          <div className="h-px bg-[#e6ddcb] my-1" />
+                          <button
+                            onClick={() => { setAvatarDropdownOpen(false); signOut(); }}
+                            className="w-full flex items-center gap-3 px-3 py-2 hover:bg-black/5 cursor-pointer"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            <span className="font-medium">Logout</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>

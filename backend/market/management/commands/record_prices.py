@@ -35,7 +35,7 @@ class Command(BaseCommand):
             if not force:
                 last_record = MarketOptionSeries.objects.filter(
                     option_id=stat.option_id,
-                    interval="5M"
+                    interval="1M"
                 ).order_by('-bucket_start').first()
 
                 # Skip if price hasn't changed
@@ -45,7 +45,7 @@ class Command(BaseCommand):
             rows.append(MarketOptionSeries(
                 option_id=stat.option_id,
                 market_id=stat.option.market_id,
-                interval="5M",  # Changed from 1M to 5M
+                interval="1M",  # Must match series_service.py query
                 bucket_start=now,
                 value_bps=stat.prob_bps,
             ))
