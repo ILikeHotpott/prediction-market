@@ -4,7 +4,8 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, Menu, X, User, Trophy, Bookmark, LogOut, Wallet } from "lucide-react";
+import { Bell, Menu, X, User, Trophy, Bookmark, LogOut, Wallet, Globe } from "lucide-react";
+import { useTranslations } from "next-intl";
 import SearchDropdown from "@/components/SearchDropdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,7 +13,8 @@ import { useAuth } from "@/components/auth/AuthProvider";
 import { usePortfolio } from "@/components/PortfolioProvider";
 import Logo from "@/components/Logo";
 import DepositModal from "@/components/DepositModal";
-import { NAV_CATEGORIES, getCategoryEmoji } from "@/lib/constants/categories";
+import { NAV_CATEGORIES } from "@/lib/constants/categories";
+import LanguageSelector from "@/components/LanguageSelector";
 
 const backendBase =
   typeof window !== "undefined"
@@ -34,9 +36,28 @@ export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
+  const [navCategories, setNavCategories] = useState(NAV_CATEGORIES);
   const dropdownRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
   const { theme, setTheme } = useTheme();
+  const t = useTranslations("nav");
+
+  // Fetch navigation categories from API
+  useEffect(() => {
+    fetch(`${backendBase}/api/tags/?nav=1`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.items?.length > 0) {
+          setNavCategories(
+            data.items.map((t) => ({
+              value: t.name.toLowerCase().replace(/\s+/g, "-"),
+              label: t.name,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleMouseEnter = () => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
@@ -117,20 +138,20 @@ export default function Navigation() {
                     className="text-accent hover:text-white font-semibold font-display tracking-wide uppercase"
                     onClick={() => openAuthModal("login")}
                   >
-                    Log In
+                    {t("login")}
                   </button>
                   <Button
                     className="bg-primary hover:bg-primary/90 text-white font-bold tracking-wide border-2 border-primary-foreground/20 shadow-[0_4px_0_rgb(150,0,0)] active:shadow-none active:translate-y-[4px] transition-all rounded-lg uppercase"
                     onClick={() => openAuthModal("signup")}
                   >
-                    Sign Up
+                    {t("signup")}
                   </Button>
                 </>
               ) : (
                 <>
                   <Link href="/portfolio" className="flex items-center gap-5 hover:opacity-90">
                     <div className="text-left">
-                      <div className="text-[13px] text-muted-foreground leading-tight font-bold">PORTFOLIO</div>
+                      <div className="text-[13px] text-muted-foreground leading-tight font-bold uppercase">{t("portfolio")}</div>
                       {navLoading ? (
                         <Skeleton className="h-5 w-24" style={{ background: 'rgba(255,255,255,0.15)' }} />
                       ) : (
@@ -140,7 +161,7 @@ export default function Navigation() {
                       )}
                     </div>
                     <div className="text-left">
-                      <div className="text-[13px] text-muted-foreground leading-tight font-bold">CASH</div>
+                      <div className="text-[13px] text-muted-foreground leading-tight font-bold uppercase">{t("cash")}</div>
                       {navLoading ? (
                         <Skeleton className="h-5 w-20" style={{ background: 'rgba(255,255,255,0.15)' }} />
                       ) : (
@@ -155,7 +176,7 @@ export default function Navigation() {
                     className="h-10 px-6 font-bold border-2 border-white/20 shadow-[0_4px_0_rgba(0,0,0,0.2)] active:shadow-none active:translate-y-[4px] transition-all rounded-lg uppercase hover:opacity-90"
                     onClick={() => setDepositModalOpen(true)}
                   >
-                    Deposit
+                    {t("deposit")}
                   </Button>
                   <Bell className="w-6 h-6 text-muted-foreground cursor-pointer hover:text-accent transition-colors" />
 
@@ -191,7 +212,7 @@ export default function Navigation() {
                             onClick={() => setAvatarDropdownOpen(false)}
                           >
                             <Wallet className="w-4 h-4" />
-                            <span className="font-medium">Portfolio</span>
+                            <span className="font-medium">{t("portfolio")}</span>
                           </Link>
                           <Link
                             href="/profile"
@@ -199,7 +220,7 @@ export default function Navigation() {
                             onClick={() => setAvatarDropdownOpen(false)}
                           >
                             <User className="w-4 h-4" />
-                            <span className="font-medium">Profile</span>
+                            <span className="font-medium">{t("profile")}</span>
                           </Link>
                           <Link
                             href="/leaderboard"
@@ -207,7 +228,7 @@ export default function Navigation() {
                             onClick={() => setAvatarDropdownOpen(false)}
                           >
                             <Trophy className="w-4 h-4" />
-                            <span className="font-medium">Leaderboard</span>
+                            <span className="font-medium">{t("leaderboard")}</span>
                           </Link>
                           <Link
                             href="/watchlist"
@@ -215,15 +236,17 @@ export default function Navigation() {
                             onClick={() => setAvatarDropdownOpen(false)}
                           >
                             <Bookmark className="w-4 h-4" />
-                            <span className="font-medium">Watchlist</span>
+                            <span className="font-medium">{t("watchlist")}</span>
                           </Link>
+                          <div className="h-px bg-[#e6ddcb] my-1" />
+                          <LanguageSelector onSelect={() => setAvatarDropdownOpen(false)} />
                           <div className="h-px bg-[#e6ddcb] my-1" />
                           <button
                             onClick={() => { setAvatarDropdownOpen(false); signOut(); }}
                             className="w-full flex items-center gap-3 px-3 py-2 hover:bg-black/5 cursor-pointer"
                           >
                             <LogOut className="w-4 h-4" />
-                            <span className="font-medium">Logout</span>
+                            <span className="font-medium">{t("logout")}</span>
                           </button>
                         </div>
                       </div>
@@ -244,7 +267,7 @@ export default function Navigation() {
         </div>
 
         <div className="hidden md:flex gap-6 overflow-x-auto scrollbar-hide pt-4 pb-0 border-b border-white/10">
-          {NAV_CATEGORIES.map((category) => {
+          {navCategories.map((category) => {
             const isActive = currentCategory === category.value;
             return (
               <Link
@@ -276,13 +299,13 @@ export default function Navigation() {
                     className="text-accent hover:text-white sm:flex-1 uppercase font-bold"
                     onClick={() => openAuthModal("login")}
                   >
-                    Log In
+                    {t("login")}
                   </Button>
                   <Button
                     className="bg-primary hover:bg-primary/90 text-white sm:flex-1 uppercase font-bold"
                     onClick={() => openAuthModal("signup")}
                   >
-                    Sign Up
+                    {t("signup")}
                   </Button>
                 </div>
               ) : (
@@ -302,21 +325,21 @@ export default function Navigation() {
                       {walletLabel && <div className="text-xs text-gray-400 truncate">{walletLabel}</div>}
                     </div>
                     <button className="text-red-300 text-sm font-bold uppercase" onClick={signOut}>
-                      Logout
+                      {t("logout")}
                     </button>
                   </div>
 
                   <div className="flex items-center gap-3">
                     <Link href="/portfolio" className="flex-1">
                       <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                        <div className="text-xs text-muted-foreground font-bold uppercase">Portfolio</div>
+                        <div className="text-xs text-muted-foreground font-bold uppercase">{t("portfolio")}</div>
                         {navLoading ? (
                           <Skeleton className="h-5 w-24" style={{ background: 'rgba(255,255,255,0.15)' }} />
                         ) : (
                           <div className="text-lg font-semibold text-secondary font-display">{fmt(navPortfolio)}</div>
                         )}
                         <div className="text-xs text-muted-foreground font-bold uppercase">
-                          Cash{" "}
+                          {t("cash")}{" "}
                           {navLoading ? (
                             <Skeleton className="h-4 w-20 inline-block align-middle" style={{ background: 'rgba(255,255,255,0.15)' }} />
                           ) : (
@@ -330,7 +353,7 @@ export default function Navigation() {
                       className="flex-shrink-0 font-bold h-12 px-4 uppercase hover:opacity-90"
                       onClick={() => setDepositModalOpen(true)}
                     >
-                      Deposit
+                      {t("deposit")}
                     </Button>
                     <Bell className="w-5 h-5 text-gray-300 flex-shrink-0" />
                   </div>
@@ -339,7 +362,7 @@ export default function Navigation() {
             </div>
 
             <div className="flex gap-3 overflow-x-auto scrollbar-hide pt-1 pb-1">
-              {NAV_CATEGORIES.map((category) => {
+              {navCategories.map((category) => {
                 const isActive = currentCategory === category.value;
                 return (
                   <Link

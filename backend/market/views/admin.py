@@ -16,6 +16,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from ..models import AmmPool, Event, Market, User
+from ..models.users import UserRole
 from ..services.amm.settlement import (
     SettlementError,
     resolve_and_settle_market,
@@ -27,14 +28,29 @@ logger = logging.getLogger(__name__)
 
 
 def _get_admin_user(request) -> Optional[User]:
-    """Extract admin user from request. Returns None if not authenticated or not admin."""
+    """Extract admin user from request. Returns None if not authenticated or not admin/superadmin."""
     user_id = request.headers.get("X-User-Id")
     if not user_id:
         return None
 
     try:
         user = User.objects.get(pk=user_id)
-        if user.role != "admin":
+        if user.role not in UserRole.ADMIN_ROLES:
+            return None
+        return user
+    except User.DoesNotExist:
+        return None
+
+
+def _get_superadmin_user(request) -> Optional[User]:
+    """Extract superadmin user from request. Returns None if not superadmin."""
+    user_id = request.headers.get("X-User-Id")
+    if not user_id:
+        return None
+
+    try:
+        user = User.objects.get(pk=user_id)
+        if user.role != UserRole.SUPERADMIN:
             return None
         return user
     except User.DoesNotExist:
@@ -322,3 +338,88 @@ def admin_add_collateral(request, event_id: str) -> JsonResponse:
     except Exception as e:
         logger.exception("Error adding collateral for event %s: %s", event_id, e)
         return _json_error("Internal server error", "INTERNAL_ERROR", status=500)
+
+
+@require_http_methods(["GET"])
+def admin_list_users(request) -> JsonResponse:
+    """
+    GET /api/admin/users/
+    List all users with their roles. Superadmin only.
+    Supports pagination: ?page=1&page_size=20&search=xxx
+    """
+    admin_user = _get_superadmin_user(request)
+    if admin_user is None:
+        return _json_error("Superadmin access required", "UNAUTHORIZED", status=403)
+
+    search = request.GET.get("search", "").strip()
+    try:
+        page = max(int(request.GET.get("page", 1)), 1)
+        page_size = min(max(int(request.GET.get("page_size", 20)), 1), 100)
+    except (TypeError, ValueError):
+        page, page_size = 1, 20
+
+    users_qs = User.objects.all().order_by("-created_at")
+    if search:
+        users_qs = users_qs.filter(display_name__icontains=search)
+
+    total = users_qs.count()
+    offset = (page - 1) * page_size
+    users = [
+        {
+            "id": str(u.id),
+            "display_name": u.display_name,
+            "email": u.email,
+            "role": u.role,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users_qs[offset:offset + page_size]
+    ]
+    return JsonResponse({"users": users, "total": total, "page": page, "page_size": page_size})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def admin_update_user_role(request, user_id: str) -> JsonResponse:
+    """
+    POST /api/admin/users/<user_id>/role/
+    Update a user's role. Superadmin only.
+    Can only set role to 'user' or 'admin', not 'superadmin'.
+    """
+    admin_user = _get_superadmin_user(request)
+    if admin_user is None:
+        return _json_error("Superadmin access required", "UNAUTHORIZED", status=403)
+
+    try:
+        data = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return _json_error("Invalid JSON", "INVALID_JSON", status=400)
+
+    new_role = data.get("role")
+    if new_role not in (UserRole.USER, UserRole.ADMIN):
+        return _json_error("Role must be 'user' or 'admin'", "INVALID_ROLE", status=400)
+
+    try:
+        target_user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return _json_error("User not found", "USER_NOT_FOUND", status=404)
+
+    if target_user.role == UserRole.SUPERADMIN:
+        return _json_error("Cannot modify superadmin role", "FORBIDDEN", status=403)
+
+    old_role = target_user.role
+    target_user.role = new_role
+    target_user.updated_at = timezone.now()
+    target_user.save(update_fields=["role", "updated_at"])
+
+    # Audit log
+    logger.info(
+        "ROLE_CHANGE: admin=%s changed user=%s (%s) role from %s to %s",
+        admin_user.id, target_user.id, target_user.display_name, old_role, new_role
+    )
+
+    return JsonResponse({
+        "id": str(target_user.id),
+        "display_name": target_user.display_name,
+        "role": target_user.role,
+        "old_role": old_role,
+    })

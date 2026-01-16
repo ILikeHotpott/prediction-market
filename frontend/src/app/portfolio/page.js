@@ -18,6 +18,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
+import { useTranslations } from "next-intl"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -53,6 +54,7 @@ async function fetchOnce(key, factory, ttlMs = 3000) {
 export default function PortfolioPage() {
   const { user, openAuthModal } = useAuth()
   const { refreshPortfolio } = usePortfolio()
+  const t = useTranslations("portfolio")
   const [activeTab, setActiveTab] = useState("positions")
   const [loadingPortfolio, setLoadingPortfolio] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -381,12 +383,12 @@ export default function PortfolioPage() {
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 py-6">
         {!user && (
           <div className="text-center text-slate-800 py-10">
-            Please log in first.
+            {t("pleaseLogin")}
             <Button
               className="ml-3 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white border border-[#3f5e9c] shadow-sm"
               onClick={() => openAuthModal("login")}
             >
-              Log In
+              {t("loginRequired")}
             </Button>
           </div>
         )}
@@ -405,21 +407,21 @@ export default function PortfolioPage() {
                     </>
                   ) : (
                     <>
-                      <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Value</div>
+                      <div className="text-xs text-slate-500 uppercase tracking-wide mb-1">{t("totalValue")}</div>
                       <div className="text-4xl font-bold text-slate-900 mb-4">${totalValue.toFixed(2)}</div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <div className="text-xs text-slate-500 uppercase tracking-wide">Cash</div>
+                          <div className="text-xs text-slate-500 uppercase tracking-wide">{t("cash")}</div>
                           <div className="text-lg font-semibold text-slate-800">${cashValue.toFixed(2)}</div>
                         </div>
                         <div>
-                          <div className="text-xs text-slate-500 uppercase tracking-wide">Holdings</div>
+                          <div className="text-xs text-slate-500 uppercase tracking-wide">{t("holdings")}</div>
                           <div className="text-lg font-semibold text-slate-800">${holdingsValue.toFixed(2)}</div>
                         </div>
                       </div>
                       <div className="mt-4 pt-3 border-t border-[#e6ddcb]">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500 uppercase tracking-wide">Total P&L</span>
+                          <span className="text-xs text-slate-500 uppercase tracking-wide">{t("totalPnl")}</span>
                           <span className={`text-lg font-semibold ${totalPnl >= 0 ? "text-green-600" : "text-red-500"}`}>
                             {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
                           </span>
@@ -436,7 +438,7 @@ export default function PortfolioPage() {
                       <span className="text-slate-500 text-sm">
                         {pnlHistory.current_pnl >= 0 ? "▲" : "▼"}
                       </span>
-                      <span className="text-slate-700 text-sm font-medium">Profit/Loss</span>
+                      <span className="text-slate-700 text-sm font-medium">{t("profitLoss")}</span>
                     </div>
                     <div className="flex gap-1">
                       {["1d", "1w", "1m", "all"].map((p) => (
@@ -458,7 +460,7 @@ export default function PortfolioPage() {
                     {pnlHistory.current_pnl >= 0 ? "" : "-"}${Math.abs(pnlHistory.current_pnl).toFixed(2)}
                   </div>
                   <div className="text-xs text-slate-500 mb-2">
-                    {pnlPeriod === "1d" ? "Past Day" : pnlPeriod === "1w" ? "Past Week" : pnlPeriod === "1m" ? "Past Month" : "All Time"}
+                    {pnlPeriod === "1d" ? t("pastDay") : pnlPeriod === "1w" ? t("pastWeek") : pnlPeriod === "1m" ? t("pastMonth") : t("allTime")}
                   </div>
                   <div className="h-24">
                     {pnlLoading ? (
@@ -489,7 +491,7 @@ export default function PortfolioPage() {
                         </AreaChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div className="h-full flex items-center justify-center text-slate-500 text-sm">No data</div>
+                      <div className="h-full flex items-center justify-center text-slate-500 text-sm">{t("noData")}</div>
                     )}
                   </div>
                 </CardContent>
@@ -505,7 +507,7 @@ export default function PortfolioPage() {
                 }`}
                 onClick={() => setActiveTab("positions")}
               >
-                Positions
+                {t("positions")}
               </button>
               <button
                 className={`pb-2 text-sm font-semibold transition-colors ${
@@ -515,14 +517,14 @@ export default function PortfolioPage() {
                 }`}
                 onClick={() => setActiveTab("history")}
               >
-                History
+                {t("history")}
               </button>
             </div>
 
             {activeTab === "positions" && (
               <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md mb-6">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-slate-900">Positions</CardTitle>
+                  <CardTitle className="text-slate-900">{t("positions")}</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   {showPortfolioSkeleton ? (
@@ -530,11 +532,11 @@ export default function PortfolioPage() {
                       <table className="w-full text-sm text-left text-slate-900">
                         <thead className="bg-[#f2eadc] text-slate-700 uppercase text-xs">
                           <tr>
-                            <th className="px-4 py-3">Market</th>
-                            <th className="px-4 py-3">Price</th>
-                            <th className="px-4 py-3">Bet</th>
-                            <th className="px-4 py-3">Cash Out</th>
-                            <th className="px-4 py-3">P&L</th>
+                            <th className="px-4 py-3">{t("market")}</th>
+                            <th className="px-4 py-3">{t("price")}</th>
+                            <th className="px-4 py-3">{t("bet")}</th>
+                            <th className="px-4 py-3">{t("cashOut")}</th>
+                            <th className="px-4 py-3">{t("pnl")}</th>
                             <th className="px-4 py-3"></th>
                           </tr>
                         </thead>
@@ -573,11 +575,11 @@ export default function PortfolioPage() {
                       <table className="w-full text-sm text-left text-slate-900">
                         <thead className="bg-[#f2eadc] text-slate-700 uppercase text-xs">
                           <tr>
-                            <th className="px-4 py-3">Market</th>
-                            <th className="px-4 py-3">Price</th>
-                            <th className="px-4 py-3">Bet</th>
-                            <th className="px-4 py-3">Cash Out</th>
-                            <th className="px-4 py-3">P&L</th>
+                            <th className="px-4 py-3">{t("market")}</th>
+                            <th className="px-4 py-3">{t("price")}</th>
+                            <th className="px-4 py-3">{t("bet")}</th>
+                            <th className="px-4 py-3">{t("cashOut")}</th>
+                            <th className="px-4 py-3">{t("pnl")}</th>
                             <th className="px-4 py-3"></th>
                           </tr>
                         </thead>
@@ -624,7 +626,7 @@ export default function PortfolioPage() {
                                   disabled={sellingId === p.option_id}
                                   onClick={() => handleSellPosition(p)}
                                 >
-                                  {sellingId === p.option_id ? "Selling..." : "Sell"}
+                                  {sellingId === p.option_id ? t("selling") : t("sell")}
                                 </Button>
                               </td>
                             </tr>
@@ -632,7 +634,7 @@ export default function PortfolioPage() {
                           {!positions.length && (
                             <tr>
                               <td className="px-4 py-4 text-center text-slate-700" colSpan={6}>
-                                No positions yet.
+                                {t("noPositions")}
                               </td>
                             </tr>
                           )}
@@ -647,17 +649,17 @@ export default function PortfolioPage() {
             {activeTab === "history" && (
               <Card className="border border-[#e6ddcb] bg-[#f9f6ee] text-slate-900 shadow-md">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-slate-900">History</CardTitle>
+                  <CardTitle className="text-slate-900">{t("history")}</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="overflow-x-auto" style={{ minHeight: historyTableMinHeight }}>
                     <table className="w-full text-sm text-left text-slate-900">
                       <thead className="bg-[#f2eadc] text-slate-700 uppercase text-xs">
                         <tr>
-                          <th className="px-5 py-3">Activity</th>
-                          <th className="px-5 py-3">Market</th>
-                          <th className="px-5 py-3 text-right">Value</th>
-                          <th className="px-5 py-3 text-right">Time</th>
+                          <th className="px-5 py-3">{t("activity")}</th>
+                          <th className="px-5 py-3">{t("market")}</th>
+                          <th className="px-5 py-3 text-right">{t("value")}</th>
+                          <th className="px-5 py-3 text-right">{t("time")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -699,11 +701,11 @@ export default function PortfolioPage() {
                                   >
                                     {(() => {
                                       const side = String(h.side || "").toLowerCase()
-                                      if (side === "buy") return "Bought"
-                                      if (side === "sell") return "Sold"
-                                      if (side === "claimed") return "Claimed"
-                                      if (side === "lost") return "Lost"
-                                      if (side === "claim") return "Claimed"
+                                      if (side === "buy") return t("bought")
+                                      if (side === "sell") return t("sold")
+                                      if (side === "claimed") return t("claimed")
+                                      if (side === "lost") return t("lost")
+                                      if (side === "claim") return t("claimed")
                                       return h.side || "—"
                                     })()}
                                   </span>
@@ -789,7 +791,7 @@ export default function PortfolioPage() {
                         {!showHistorySkeleton && !history.length && (
                           <tr>
                             <td className="px-4 py-4 text-center text-slate-700" colSpan={4}>
-                              No history yet.
+                              {t("noHistory")}
                             </td>
                           </tr>
                         )}

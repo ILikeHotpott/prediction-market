@@ -1,7 +1,7 @@
 from django.urls import path
 from django.http import JsonResponse
 
-from .views import admin, amm, comments, events, market, orders, redemption, search, series, upload, users, watchlist
+from .views import admin, amm, comments, events, market, orders, redemption, search, series, tags, translations, upload, users, watchlist
 
 
 def health_check(request):
@@ -11,6 +11,9 @@ def health_check(request):
 urlpatterns = [
     # Health check
     path("api/health/", health_check, name="health-check"),
+
+    # Translation API
+    path("api/translate/", translations.translate, name="translate"),
 
     # Search API
     path("api/search/", search.search, name="search"),
@@ -138,5 +141,13 @@ urlpatterns = [
         redemption.redeem_code,
         name="user-redeem-code",
     ),
+    # Tags management
+    path("api/tags/", tags.list_tags, name="tags-list"),
+    path("api/admin/tags/create/", tags.create_tag, name="admin-tags-create"),
+    path("api/admin/tags/<uuid:tag_id>/", tags.update_tag, name="admin-tags-update"),
+    path("api/admin/tags/<uuid:tag_id>/delete/", tags.delete_tag, name="admin-tags-delete"),
+    # User management (superadmin only)
+    path("api/admin/users/", admin.admin_list_users, name="admin-users-list"),
+    path("api/admin/users/<uuid:user_id>/role/", admin.admin_update_user_role, name="admin-users-role"),
 ]
 

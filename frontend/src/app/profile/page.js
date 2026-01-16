@@ -6,12 +6,14 @@ import { useAuth } from "@/components/auth/AuthProvider"
 import { usePortfolio } from "@/components/PortfolioProvider"
 import { Button } from "@/components/ui/button"
 import { Camera } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
 export default function ProfilePage() {
   const { user, openAuthModal } = useAuth()
   const { refreshPortfolio } = usePortfolio()
+  const t = useTranslations("profile")
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -112,7 +114,7 @@ export default function ProfilePage() {
           <Navigation />
         </Suspense>
         <div className="max-w-[600px] mx-auto px-4 py-10 text-center">
-          <p className="text-foreground mb-4">Please log in to view your profile</p>
+          <p className="text-foreground mb-4">{t("pleaseLogin")}</p>
           <Button onClick={() => openAuthModal("login")}>Log In</Button>
         </div>
       </div>
@@ -125,7 +127,7 @@ export default function ProfilePage() {
         <Navigation />
       </Suspense>
       <div className="max-w-[600px] mx-auto px-4 sm:px-6 py-8">
-        <h1 className="text-3xl font-bold text-foreground mb-8">Profile Settings</h1>
+        <h1 className="text-3xl font-bold text-foreground mb-8">{t("title")}</h1>
 
         {error && <div className="text-red-300 mb-4 p-3 bg-red-900/30 rounded-xl border border-red-800/50">{error}</div>}
         {success && <div className="text-green-300 mb-4 p-3 bg-green-900/30 rounded-xl border border-green-800/50">{success}</div>}
@@ -161,16 +163,16 @@ export default function ProfilePage() {
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Camera className="w-4 h-4 mr-2" />
-                Upload
+                {t("upload")}
               </Button>
               {pendingAvatar && (
-                <span className="text-sm text-yellow-300">Unsaved</span>
+                <span className="text-sm text-yellow-300">{t("unsaved")}</span>
               )}
             </div>
 
             {/* Email (read-only) */}
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-2">Email</label>
+              <label className="block text-sm font-semibold text-foreground mb-2">{t("email")}</label>
               <input
                 type="email"
                 value={profile?.email || user?.email || ""}
@@ -181,12 +183,12 @@ export default function ProfilePage() {
 
             {/* Username */}
             <div>
-              <label className="block text-sm font-semibold text-foreground mb-2">Username</label>
+              <label className="block text-sm font-semibold text-foreground mb-2">{t("username")}</label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Enter your username"
+                placeholder={t("usernamePlaceholder")}
                 className="w-full px-4 py-3 rounded-xl bg-[#1F2B24] border border-white/20 text-foreground placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-[#F2C35B] focus:border-transparent"
               />
             </div>
@@ -197,7 +199,7 @@ export default function ProfilePage() {
               onClick={handleSave}
               disabled={saving}
             >
-              {saving ? "Saving..." : "Save changes"}
+              {saving ? t("saving") : t("save")}
             </Button>
           </div>
         )}

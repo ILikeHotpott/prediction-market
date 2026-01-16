@@ -13,10 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useTranslations } from "next-intl"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
 export default function Comments({ marketId, user, openAuthModal }) {
+  const t = useTranslations("comments")
   const [comments, setComments] = useState([])
   const [commentsCache, setCommentsCache] = useState({})
   const [holdersOnly, setHoldersOnly] = useState(true)
@@ -146,17 +148,17 @@ export default function Comments({ marketId, user, openAuthModal }) {
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <CardTitle className="text-xl font-semibold text-slate-900">Comments</CardTitle>
+            <CardTitle className="text-xl font-semibold text-slate-900">{t("title")}</CardTitle>
             <span className="rounded-full bg-white px-3 py-1 text-sm text-slate-800 border border-[#e6ddcb]">
               {totalCount.toLocaleString()}
             </span>
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-700">
             <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
-              Top Holders
+              {t("topHolders")}
             </Button>
             <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
-              Activity
+              {t("activity")}
             </Button>
           </div>
         </div>
@@ -168,7 +170,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
             rows={3}
             value={drafts.root || ""}
             onChange={(e) => updateDraft("root", e.target.value)}
-            placeholder={user ? "Type your comment..." : "Sign in to add a comment"}
+            placeholder={user ? t("placeholder") : t("placeholderSignIn")}
             className="w-full bg-white border border-[#e6ddcb] text-slate-900 placeholder:text-slate-500 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4b6ea9]/60 resize-none"
             disabled={!user}
           />
@@ -179,14 +181,14 @@ export default function Comments({ marketId, user, openAuthModal }) {
               size="sm"
               className="px-6 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white font-semibold rounded-full shadow-sm"
             >
-              {postingIds.root ? "Posting..." : "Post"}
+              {postingIds.root ? t("posting") : t("submit")}
             </Button>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-3">
-            <span className="text-slate-700 text-sm">Filter</span>
+            <span className="text-slate-700 text-sm">{t("filter")}</span>
             <div className="inline-flex rounded-full bg-white border border-[#e6ddcb] p-1">
               <button
                 className={`px-4 py-1 text-sm rounded-full transition-colors ${
@@ -195,7 +197,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
                 onClick={() => setHoldersOnly(false)}
                 type="button"
               >
-                All comments
+                {t("allComments")}
               </button>
               <button
                 className={`px-4 py-1 text-sm rounded-full transition-colors ${
@@ -204,22 +206,22 @@ export default function Comments({ marketId, user, openAuthModal }) {
                 onClick={() => setHoldersOnly(true)}
                 type="button"
               >
-                Holders only
+                {t("holdersOnly")}
               </button>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-slate-700 text-sm">Sort</span>
+            <span className="text-slate-700 text-sm">{t("sort")}</span>
             <Select value={sort} onValueChange={(val) => setSort(val)}>
               <SelectTrigger className="w-36 bg-white border border-[#e6ddcb] text-slate-900 rounded-full px-4 py-2 h-10 focus:ring-2 focus:ring-[#4b6ea9]/60">
-                <SelectValue placeholder="Sort" />
+                <SelectValue placeholder={t("sort")} />
               </SelectTrigger>
               <SelectContent
                 className="text-slate-900 border border-[#e6ddcb] bg-white"
               >
-                <SelectItem value="newest">Newest</SelectItem>
-                <SelectItem value="oldest">Oldest</SelectItem>
+                <SelectItem value="newest">{t("newest")}</SelectItem>
+                <SelectItem value="oldest">{t("oldest")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -234,7 +236,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
         {loading && comments.length === 0 ? (
           renderSkeletons()
         ) : filteredComments.length === 0 ? (
-          <div className="text-slate-700">No comments yet.</div>
+          <div className="text-slate-700">{t("noComments")}</div>
         ) : (
           <div className="space-y-4">
             {filteredComments.map((comment) => (

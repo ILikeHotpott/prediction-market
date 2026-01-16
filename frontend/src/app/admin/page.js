@@ -5,9 +5,12 @@ import { Suspense, useEffect, useMemo, useState, useRef } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useRole } from "@/hooks/useRole";
 import ResolveMarketDialog from "@/components/admin/ResolveMarketDialog";
 import RedemptionCodeGeneratorForm from "@/components/admin/RedemptionCodeGeneratorForm";
 import RedemptionCodesList from "@/components/admin/RedemptionCodesList";
+import TagsManager from "@/components/admin/TagsManager";
+import UserRoleManager from "@/components/admin/UserRoleManager";
 import {
   Pagination,
   PaginationContent,
@@ -18,7 +21,6 @@ import {
   PaginationEllipsis,
 } from "@/components/ui/pagination";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ADMIN_CATEGORIES } from "@/lib/constants/categories";
 import { Copy, Check } from "lucide-react";
 
 const backendBase =
@@ -26,12 +28,12 @@ const backendBase =
 
 export default function AdminMarketsPage() {
   const { user, loading: authLoading } = useAuth();
+  const { role: userRole, isAdmin, isSuperAdmin, loading: roleLoading } = useRole();
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState([]);
   const [statusFilter, setStatusFilter] = useState("draft");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 15;
-  const [userRole, setUserRole] = useState(null);
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -59,6 +61,7 @@ export default function AdminMarketsPage() {
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [categories, setCategories] = useState([]);
 
   const validToSubmit = useMemo(() => {
     const requiredMarkets = form.group_rule === "standalone" ? 1 : 2;
@@ -106,37 +109,18 @@ export default function AdminMarketsPage() {
   }, [totalPages, currentPage]);
 
   useEffect(() => {
-    if (!user) return;
-    const metaRole = user.user_metadata?.role;
-    if (metaRole) {
-      setUserRole(metaRole);
-    }
-    fetchUserRole();
-  }, [user]);
-
-  useEffect(() => {
-    if (userRole === "admin") {
+    if (isAdmin) {
       fetchEvents();
+      fetchCategories();
     }
-  }, [userRole]);
+  }, [isAdmin]);
 
-  async function fetchUserRole() {
-    if (!user) return;
+  async function fetchCategories() {
     try {
-      const res = await fetch(`${backendBase}/api/users/me/`, {
-        headers: {
-          "X-User-Id": user.id,
-        },
-      });
+      const res = await fetch(`${backendBase}/api/tags/`);
       const data = await res.json();
-      if (res.ok) {
-        setUserRole(data.role);
-      } else {
-        setUserRole(null);
-      }
-    } catch (_e) {
-      // keep any previously set meta role
-    }
+      setCategories((data.items || []).map(t => ({ value: t.name, label: t.name })));
+    } catch (_e) {}
   }
 
   async function fetchEvents() {
@@ -385,13 +369,19 @@ export default function AdminMarketsPage() {
           </span>
         </header>
 
-        {userRole === "admin" ? (
+        {isAdmin ? (
           <Tabs defaultValue="events" className="w-full">
             <TabsList className="mb-6">
               <TabsTrigger value="create">Create Event</TabsTrigger>
               <TabsTrigger value="events">Event List</TabsTrigger>
-              <TabsTrigger value="generate">Generate Code</TabsTrigger>
-              <TabsTrigger value="codes">Redemption Codes</TabsTrigger>
+              {isSuperAdmin && (
+                <>
+                  <TabsTrigger value="tags">Tags</TabsTrigger>
+                  <TabsTrigger value="generate">Generate Code</TabsTrigger>
+                  <TabsTrigger value="codes">Redemption Codes</TabsTrigger>
+                  <TabsTrigger value="users">User Management</TabsTrigger>
+                </>
+              )}
             </TabsList>
 
             <TabsContent value="create">
@@ -426,7 +416,7 @@ export default function AdminMarketsPage() {
                 onChange={(e) => handleChange("category", e.target.value)}
               >
                 <option value="">Select category</option>
-                {ADMIN_CATEGORIES.map((cat) => (
+                {categories.map((cat) => (
                   <option key={cat.value} value={cat.value}>
                     {cat.label}
                   </option>
@@ -765,6 +755,10 @@ export default function AdminMarketsPage() {
         </section>
             </TabsContent>
 
+            <TabsContent value="tags">
+              <TagsManager user={user} />
+            </TabsContent>
+
             <TabsContent value="generate">
               <RedemptionCodeGeneratorForm user={user} />
             </TabsContent>
@@ -772,11 +766,17 @@ export default function AdminMarketsPage() {
             <TabsContent value="codes">
               <RedemptionCodesList user={user} />
             </TabsContent>
+
+            {isSuperAdmin && (
+              <TabsContent value="users">
+                <UserRoleManager user={user} />
+              </TabsContent>
+            )}
           </Tabs>
         ) : (
           <section className="bg-card border border rounded-xl p-6">
             <div className="text-foreground text-lg">
-              {authLoading ? "Loading..." : "Admin access only"}
+              {(authLoading || roleLoading) ? "Loading..." : "Admin access only"}
             </div>
           </section>
         )}

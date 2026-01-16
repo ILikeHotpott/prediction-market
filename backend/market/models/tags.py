@@ -7,6 +7,8 @@ from django.utils import timezone
 class Tag(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.TextField()
+    sort_order = models.IntegerField(default=0)
+    is_nav = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

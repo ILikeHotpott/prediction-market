@@ -5,6 +5,7 @@ import Navigation from "@/components/Navigation"
 import MarketCard from "@/components/MarketCard"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useTranslations } from "next-intl"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -22,6 +23,7 @@ export default function WatchlistPage() {
   const [loading, setLoading] = useState(true)
   const [watchedIds, setWatchedIds] = useState(new Set())
   const { user } = useAuth()
+  const t = useTranslations("watchlist")
 
   useEffect(() => {
     if (user) fetchWatchlist()
@@ -99,11 +101,11 @@ export default function WatchlistPage() {
         <Navigation />
       </Suspense>
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 pb-16">
-        <h1 className="text-2xl font-bold text-foreground mb-6">My Watchlist</h1>
+        <h1 className="text-2xl font-bold text-foreground mb-6">{t("title")}</h1>
 
         {!user && (
           <div className="text-center text-muted-foreground py-20">
-            Please log in to view your watchlist
+            {t("pleaseLogin")}
           </div>
         )}
 
@@ -121,7 +123,7 @@ export default function WatchlistPage() {
 
         {user && !loading && events.length === 0 && (
           <div className="text-center text-muted-foreground py-20">
-            Your watchlist is empty. Click the bookmark icon on any market to add it here.
+            {t("empty")}
           </div>
         )}
 

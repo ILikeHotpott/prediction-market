@@ -3,14 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Search, TrendingUp, Flame, Clock, Droplet, Timer, Trophy, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 const BROWSE_TAGS = [
-  { label: "New", icon: TrendingUp },
-  { label: "Trending", icon: Flame },
-  { label: "Popular", icon: Flame },
-  { label: "Liquid", icon: Droplet },
-  { label: "Ending Soon", icon: Timer },
-  { label: "Competitive", icon: Trophy },
+  { key: "new", icon: TrendingUp },
+  { key: "trending", icon: Flame },
+  { key: "popular", icon: Flame },
+  { key: "liquid", icon: Droplet },
+  { key: "endingSoon", icon: Timer },
+  { key: "competitive", icon: Trophy },
 ];
 
 const RECENT_STORAGE_KEY = "mf_recent_searches";
@@ -22,6 +23,7 @@ export default function SearchDropdown({ className = "" }) {
   const containerRef = useRef(null);
   const inputRef = useRef(null);
   const router = useRouter();
+  const t = useTranslations("search");
 
   useEffect(() => {
     const stored = localStorage.getItem(RECENT_STORAGE_KEY);
@@ -72,7 +74,7 @@ export default function SearchDropdown({ className = "" }) {
 
   const handleTagClick = (tag) => {
     setOpen(false);
-    router.push(`/search?_q=${encodeURIComponent(tag)}`);
+    router.push(`/search?_q=${encodeURIComponent(t(`tags.${tag}`))}`);
   };
 
   return (
@@ -86,7 +88,7 @@ export default function SearchDropdown({ className = "" }) {
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder="Search monofuture"
+          placeholder={t("placeholder")}
           className="w-full bg-black/20 text-white pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent border border-white/10 placeholder-white/50"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">/</span>
@@ -96,17 +98,17 @@ export default function SearchDropdown({ className = "" }) {
         <div className="absolute top-full left-0 right-0 mt-2 bg-popover border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
           <div className="p-4">
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Browse
+              {t("browse")}
             </div>
             <div className="flex flex-wrap gap-2">
               {BROWSE_TAGS.map((tag) => (
                 <button
-                  key={tag.label}
-                  onClick={() => handleTagClick(tag.label)}
+                  key={tag.key}
+                  onClick={() => handleTagClick(tag.key)}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/20 bg-white/5 hover:bg-white/10 text-foreground text-sm transition-colors"
                 >
                   <tag.icon className="w-4 h-4" />
-                  {tag.label}
+                  {t(`tags.${tag.key}`)}
                 </button>
               ))}
             </div>
@@ -115,7 +117,7 @@ export default function SearchDropdown({ className = "" }) {
           {recent.length > 0 && (
             <div className="p-4 border-t border-white/10">
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Recent
+                {t("recent")}
               </div>
               <div className="space-y-1">
                 {recent.map((term) => (

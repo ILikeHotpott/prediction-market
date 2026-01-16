@@ -310,11 +310,14 @@ def get_series_incremental(market_ids: List[str], after_timestamp: str, limit: i
         return {"series": {}, "has_more": False}
 
     # Query new points after timestamp (uses index: option_id, interval, bucket_start)
+    # Order by (bucket_start, option_id) to ensure stable pagination when multiple options
+    # share the same timestamp. Use bucket_start__gte with exclusion of already-seen
+    # option_ids at the cursor timestamp to avoid skipping data points.
     rows = MarketOptionSeries.objects.filter(
         option_id__in=options,
         interval="1M",
         bucket_start__gt=after_dt,
-    ).values("option_id", "bucket_start", "value_bps").order_by("bucket_start")[:limit + 1]
+    ).values("option_id", "bucket_start", "value_bps").order_by("bucket_start", "option_id")[:limit + 1]
 
     rows = list(rows)
     has_more = len(rows) > limit

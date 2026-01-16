@@ -37,7 +37,12 @@ def _reindex_all_events_async():
     """Reindex all events to meilisearch (fire and forget)."""
     try:
         from ..services.search import index_events
-        events = Event.objects.filter(is_hidden=False).select_related("primary_market")
+        # Only index active/closed/resolved events; exclude canceled/draft/pending
+        # to avoid re-adding events that were explicitly deleted from the index
+        events = Event.objects.filter(
+            is_hidden=False,
+            status__in=["active", "closed", "resolved"],
+        ).select_related("primary_market")
         docs = []
         for event in events:
             market = event.primary_market
@@ -374,7 +379,7 @@ def _create_event_with_markets(event_fields, markets_data, amm_params_list, payl
 def list_events(request):
     """
     Lightweight listing for homepage cards (events with primary market snapshot).
-    Supports ?category=xxx filter.
+    Supports ?category=xxx filter and ?lang=xx for translations.
     """
     is_admin = False
     user = get_user_from_request(request)
@@ -383,9 +388,10 @@ def list_events(request):
 
     category = request.GET.get("category")
     ids_param = request.GET.get("ids")
+    lang = request.GET.get("lang", "en")
 
-    # Try cache first (skip for admin to always show fresh data)
-    if not is_admin:
+    # Try cache first (skip for admin to always show fresh data, skip for non-en to avoid caching translated content)
+    if not is_admin and lang == "en":
         cached = get_cached_event_list(category, is_admin, ids_param)
         if cached is not None:
             return JsonResponse(cached, status=200)
@@ -414,11 +420,11 @@ def list_events(request):
         id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
         events_qs = events_qs.filter(id__in=id_list)
 
-    items = [serialize_event(e) for e in events_qs[:100]]
+    items = [serialize_event(e, lang) for e in events_qs[:100]]
     result = {"items": items}
 
-    # Cache the result (only for non-admin)
-    if not is_admin:
+    # Cache the result (only for non-admin and English)
+    if not is_admin and lang == "en":
         set_cached_event_list(category, is_admin, result, ids_param)
 
     return JsonResponse(result, status=200)
@@ -426,15 +432,18 @@ def list_events(request):
 
 @require_http_methods(["GET"])
 def get_event(request, event_id):
-    # Try cache first
-    cached = get_cached_event_detail(str(event_id))
-    if cached is not None:
-        # Still need to check permissions for hidden events
-        if cached.get("status") != "active" or cached.get("is_hidden"):
-            user = get_user_from_request(request)
-            if not (user and user.role == "admin"):
-                return JsonResponse({"error": "Event not available"}, status=404)
-        return JsonResponse(cached, status=200)
+    lang = request.GET.get("lang", "en")
+
+    # Try cache first (only for English)
+    if lang == "en":
+        cached = get_cached_event_detail(str(event_id))
+        if cached is not None:
+            # Still need to check permissions for hidden events
+            if cached.get("status") != "active" or cached.get("is_hidden"):
+                user = get_user_from_request(request)
+                if not (user and user.role == "admin"):
+                    return JsonResponse({"error": "Event not available"}, status=404)
+            return JsonResponse(cached, status=200)
 
     try:
         event = _prefetched_event(event_id)
@@ -446,9 +455,10 @@ def get_event(request, event_id):
         if not (user and user.role == "admin"):
             return JsonResponse({"error": "Event not available"}, status=404)
 
-    result = serialize_event(event)
-    # Cache the result
-    set_cached_event_detail(str(event_id), result)
+    result = serialize_event(event, lang)
+    # Cache the result (only for English)
+    if lang == "en":
+        set_cached_event_detail(str(event_id), result)
     return JsonResponse(result, status=200)
 
 

@@ -4,6 +4,15 @@ from django.db import models
 from django.utils import timezone
 
 
+class UserRole:
+    USER = "user"
+    ADMIN = "admin"
+    SUPERADMIN = "superadmin"
+
+    ADMIN_ROLES = (ADMIN, SUPERADMIN)
+    ALL_ROLES = (USER, ADMIN, SUPERADMIN)
+
+
 class User(models.Model):
     id = models.UUIDField(primary_key=True)
     display_name = models.TextField(unique=True, default="", blank=True)

@@ -11,7 +11,7 @@ class SimpleCORSMiddleware(MiddlewareMixin):
     def process_response(self, request, response):
         allow_origin = os.getenv("CORS_ALLOW_ORIGIN", "*")
         response["Access-Control-Allow-Origin"] = allow_origin
-        response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response["Access-Control-Allow-Headers"] = (
             "Content-Type, Authorization, X-User-Id"
         )

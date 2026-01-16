@@ -11,11 +11,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useTranslations } from "next-intl"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
 export default function LeaderboardPage() {
   const { user } = useAuth()
+  const t = useTranslations("leaderboard")
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState({ users: [], current_user: null, categories: [] })
   const [period, setPeriod] = useState("all")
@@ -74,8 +76,8 @@ export default function LeaderboardPage() {
       <div className="max-w-[900px] mx-auto px-4 sm:px-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white tracking-tight">Leaderboard</h1>
-          <p className="text-white/60 mt-1">Top traders ranked by performance</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">{t("title")}</h1>
+          <p className="text-white/60 mt-1">{t("subtitle")}</p>
         </div>
 
         {/* Filters */}
@@ -83,10 +85,10 @@ export default function LeaderboardPage() {
           {/* Period Tabs */}
           <div className="flex bg-white/10 backdrop-blur-sm rounded-xl p-1 border border-white/10">
             {[
-              { value: "today", label: "Today" },
-              { value: "weekly", label: "Week" },
-              { value: "monthly", label: "Month" },
-              { value: "all", label: "All Time" },
+              { value: "today", label: t("today") },
+              { value: "weekly", label: t("week") },
+              { value: "monthly", label: t("month") },
+              { value: "all", label: t("allTime") },
             ].map((p) => (
               <button
                 key={p.value}
@@ -105,10 +107,10 @@ export default function LeaderboardPage() {
           {/* Category Select */}
           <Select value={category || "all"} onValueChange={(v) => setCategory(v === "all" ? "" : v)}>
             <SelectTrigger className="w-[160px] bg-white/10 backdrop-blur-sm border-white/10 rounded-xl text-white font-medium">
-              <SelectValue placeholder="All Categories" />
+              <SelectValue placeholder={t("allCategories")} />
             </SelectTrigger>
             <SelectContent className="bg-[#2d3d2d] border border-white/20 rounded-xl shadow-xl">
-              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="all">{t("allCategories")}</SelectItem>
               {(data.categories || []).map((cat) => (
                 <SelectItem key={cat} value={cat}>
                   {cat}
@@ -127,7 +129,7 @@ export default function LeaderboardPage() {
                   : "text-white/70 hover:text-white hover:bg-white/10"
               }`}
             >
-              P&L
+              {t("pnl")}
             </button>
             <button
               onClick={() => setSortBy("volume")}
@@ -137,17 +139,17 @@ export default function LeaderboardPage() {
                   : "text-white/70 hover:text-white hover:bg-white/10"
               }`}
             >
-              Volume
+              {t("volume")}
             </button>
           </div>
         </div>
 
         {/* Table Header */}
         <div className="flex items-center px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
-          <span className="w-16">Rank</span>
-          <span className="flex-1">Trader</span>
-          <span className="w-32 text-right">Profit/Loss</span>
-          <span className="w-32 text-right">Volume</span>
+          <span className="w-16">{t("rank")}</span>
+          <span className="flex-1">{t("trader")}</span>
+          <span className="w-32 text-right">{t("profitLoss")}</span>
+          <span className="w-32 text-right">{t("volume")}</span>
         </div>
 
         {/* Leaderboard List */}
@@ -202,7 +204,7 @@ export default function LeaderboardPage() {
                           {u.display_name}
                           {u.is_current_user && (
                             <span className="ml-2 text-xs font-medium text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded-full">
-                              You
+                              {t("you")}
                             </span>
                           )}
                         </div>
@@ -248,7 +250,7 @@ export default function LeaderboardPage() {
                         <div className="font-semibold text-white truncate">
                           {data.current_user.display_name}
                           <span className="ml-2 text-xs font-medium text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded-full">
-                            You
+                            {t("you")}
                           </span>
                         </div>
                       </div>
@@ -268,7 +270,7 @@ export default function LeaderboardPage() {
               {data.users.length === 0 && !loading && (
                 <div className="text-center py-16">
                   <div className="text-4xl mb-3">🏆</div>
-                  <div className="text-white/50">No traders found</div>
+                  <div className="text-white/50">{t("noTraders")}</div>
                 </div>
               )}
             </div>

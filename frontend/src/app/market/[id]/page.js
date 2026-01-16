@@ -9,6 +9,7 @@ import Toast from "@/components/Toast"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { usePortfolio } from "@/components/PortfolioProvider"
 import { useParams } from "next/navigation"
+import { useLanguage } from "@/components/LanguageProvider"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -16,6 +17,7 @@ export default function MarketDetail({ params }) {
   const routeParams = useParams()
   const { user, openAuthModal } = useAuth()
   const { refreshPortfolio } = usePortfolio()
+  const { locale } = useLanguage()
   const [marketId, setMarketId] = useState(null)
   const [eventData, setEventData] = useState(null)
   const [selectedMarketId, setSelectedMarketId] = useState(null)
@@ -73,7 +75,7 @@ export default function MarketDetail({ params }) {
   useEffect(() => {
     if (!marketId) return
     fetchEvent(marketId)
-  }, [marketId])
+  }, [marketId, locale])
 
   // Track if selectMarket was just called to avoid useEffect override
   const selectMarketCalledRef = useRef(false)
@@ -119,7 +121,9 @@ export default function MarketDetail({ params }) {
       setSuccess("")
     }
     try {
-      const res = await fetch(`${backendBase}/api/events/${id}/`, { cache: "no-store" })
+      const url = new URL(`${backendBase}/api/events/${id}/`)
+      if (locale && locale !== "en") url.searchParams.set("lang", locale)
+      const res = await fetch(url.toString(), { cache: "no-store" })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to load event")
       setEventData(data)

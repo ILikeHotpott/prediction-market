@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation"
 import Navigation from "@/components/Navigation"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/components/auth/AuthProvider"
-import { ADMIN_CATEGORIES } from "@/lib/constants/categories"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -22,6 +21,7 @@ export default function EditEventPage() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [event, setEvent] = useState(null)
+  const [categories, setCategories] = useState([])
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -38,8 +38,17 @@ export default function EditEventPage() {
   useEffect(() => {
     if (eventId && user) {
       fetchEvent()
+      fetchCategories()
     }
   }, [eventId, user])
+
+  async function fetchCategories() {
+    try {
+      const res = await fetch(`${backendBase}/api/tags/`)
+      const data = await res.json()
+      setCategories((data.items || []).map(t => ({ value: t.name, label: t.name })))
+    } catch (_e) {}
+  }
 
   async function fetchEvent() {
     setLoading(true)
@@ -237,7 +246,7 @@ export default function EditEventPage() {
                     className={inputClass}
                   >
                     <option value="">Select category</option>
-                    {ADMIN_CATEGORIES.map((cat) => (
+                    {categories.map((cat) => (
                       <option key={cat.value} value={cat.value}>
                         {cat.label}
                       </option>

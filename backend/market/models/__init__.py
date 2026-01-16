@@ -13,6 +13,7 @@ from .ledger import (
 from .markets import Market, MarketOption, MarketOptionSeries, MarketOptionStats
 from .redemption import RedemptionCode
 from .tags import EventTag, MarketTag, Tag
+from .translations import Translation, EventTranslation
 from .users import User, Wallet, WalletAccount
 from .watchlist import Watchlist
 
@@ -24,6 +25,7 @@ __all__ = [
     "Comment",
     "Event",
     "EventTag",
+    "EventTranslation",
     "Market",
     "MarketOption",
     "MarketOptionSeries",
@@ -34,6 +36,7 @@ __all__ = [
     "RedemptionCode",
     "Tag",
     "Trade",
+    "Translation",
     "TxRequest",
     "User",
     "Wallet",

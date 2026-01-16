@@ -1,5 +1,5 @@
 from decimal import Decimal
-from ..models import Event, Market, MarketOption
+from ..models import Event, Market, MarketOption, EventTranslation
 
 
 def serialize_option(option: MarketOption):
@@ -58,7 +58,7 @@ def serialize_market(market: Market):
     }
 
 
-def serialize_event(event: Event):
+def serialize_event(event: Event, lang: str = "en"):
     markets = []
     if hasattr(event, "prefetched_markets"):
         markets = event.prefetched_markets
@@ -72,10 +72,32 @@ def serialize_event(event: Event):
     if primary_market is None and market_payload:
         primary_market = market_payload[0]
 
+    title = event.title
+    description = event.description
+
+    # Get translation if not English
+    if lang != "en":
+        # Check prefetched translations first
+        if hasattr(event, "prefetched_translations"):
+            trans = next((t for t in event.prefetched_translations if t.language == lang), None)
+            if trans:
+                title = trans.title
+                if trans.description:
+                    description = trans.description
+        else:
+            # Query directly
+            try:
+                trans = EventTranslation.objects.get(event_id=event.id, language=lang)
+                title = trans.title
+                if trans.description:
+                    description = trans.description
+            except EventTranslation.DoesNotExist:
+                pass
+
     return {
         "id": str(event.id),
-        "title": event.title,
-        "description": event.description,
+        "title": title,
+        "description": description,
         "cover_url": event.cover_url,
         "category": event.category,
         "status": event.status,
@@ -94,5 +116,3 @@ def serialize_event(event: Event):
         "markets": market_payload,
         "primary_market": primary_market,
     }
-
-

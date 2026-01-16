@@ -205,7 +205,7 @@ a,
 }
 
 .market-card:hover {
-  transform: translate3d(0, -6px, 0);
+  transform: translate3d(0, -1px, 0);
   box-shadow:
     0 18px 42px rgba(0, 0, 0, 0.16),
     0 1px 0 rgba(255, 255, 255, 0.85) inset,

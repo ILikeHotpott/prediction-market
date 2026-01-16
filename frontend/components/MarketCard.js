@@ -4,6 +4,7 @@ import Link from "next/link"
 import { memo, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { PolarAngleAxis, RadialBar, RadialBarChart } from "recharts"
+import { useTranslations } from "next-intl"
 
 const SUIT_SYMBOLS = ["♥", "♠", "♦", "♣"]
 const SUIT_COLORS = {
@@ -34,6 +35,7 @@ const getGaugeColors = (value) => {
 }
 
 const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = false, onToggleWatchlist }) {
+  const t = useTranslations("market")
   const outcomes = market.outcomes || []
   const outcomeNames = outcomes.map((o) => String(o.name || "").trim().toLowerCase())
   const yesOutcome = outcomes.find((o) => String(o.name || "").trim().toLowerCase() === "yes")
@@ -114,6 +116,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
                 formatProb={formatProb}
                 gradientId={chartGradientId}
                 trackId={chartTrackId}
+                chanceLabel={t("chance")}
               />
             </div>
           )}
@@ -151,7 +154,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
         </div>
 
         <div className="market-card-footer">
-          <span className="market-volume">{market.volume} Vol. </span>
+          <span className="market-volume">{market.volume} {t("volume")}. </span>
           <div className="market-footer-actions">
             {/* <button className="market-footer-icon" onClick={(e) => e.preventDefault()}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -178,7 +181,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
   )
 })
 
-function ChanceGauge({ value, formatProb, gradientId, trackId }) {
+function ChanceGauge({ value, formatProb, gradientId, trackId, chanceLabel = "chance" }) {
   const data = [{ name: "chance", value }]
   const fillColors = useMemo(() => getGaugeColors(value), [value])
   return (
@@ -217,7 +220,7 @@ function ChanceGauge({ value, formatProb, gradientId, trackId }) {
       </div>
       <div className="chance-gauge__value">
         <div className="chance-gauge__percent">{formatProb(value)}</div>
-        <div className="chance-gauge__label">chance</div>
+        <div className="chance-gauge__label">{chanceLabel}</div>
       </div>
     </div>
   )

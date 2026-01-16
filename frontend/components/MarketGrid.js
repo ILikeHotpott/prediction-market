@@ -1,11 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import MarketCard from "./MarketCard"
-import SlotLever from "./SlotLever"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useLanguage } from "@/components/LanguageProvider"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 const CACHE_KEY_PREFIX = "mf_events_"
@@ -67,9 +67,10 @@ function prefetchAllCategories() {
   })
 }
 
-async function fetchEventsData(category) {
+async function fetchEventsData(category, lang = "en") {
   const url = new URL(`${backendBase}/api/events/`)
   if (category) url.searchParams.set("category", category)
+  if (lang && lang !== "en") url.searchParams.set("lang", lang)
   try {
     const res = await fetch(url.toString(), { cache: "no-store" })
     const data = await res.json()
@@ -129,6 +130,7 @@ export default function MarketGrid() {
   const searchParams = useSearchParams()
   const category = searchParams.get("category")
   const { user } = useAuth()
+  const { locale } = useLanguage()
 
   // Try to get cached data immediately for faster initial render
   const [markets, setMarkets] = useState(() => {
@@ -136,40 +138,38 @@ export default function MarketGrid() {
     return getCachedEvents(category) || []
   })
   const [watchedIds, setWatchedIds] = useState(new Set())
-  const [spinningColumns, setSpinningColumns] = useState([false, false, false])
-  const [isSpinning, setIsSpinning] = useState(false)
-  const [spinKey, setSpinKey] = useState(0)
   const [mounted, setMounted] = useState(false)
-  const spinTimers = useRef([])
-  const bodyOverflowRef = useRef()
   const hasFetched = useRef(false)
   const isTogglingRef = useRef(false)
 
   // Set mounted flag after hydration
   useEffect(() => {
     setMounted(true)
-    // Start fetching immediately, don't wait for another effect cycle
-    fetchEventsData(category).then((data) => {
+    // Start fetching immediately with locale
+    fetchEventsData(category, locale).then((data) => {
       setMarkets(data)
-      if (data.length > 0) setCachedEvents(category, data)
+      if (data.length > 0 && locale === "en") setCachedEvents(category, data)
     }).catch(() => {})
-    // Prefetch other categories
-    if (!hasFetched.current) {
+    // Prefetch other categories (only for English)
+    if (!hasFetched.current && locale === "en") {
       hasFetched.current = true
       setTimeout(prefetchAllCategories, 100)
     }
-  }, [])
+  }, [locale])
 
-  // Handle category changes after initial mount
+  // Handle category or locale changes after initial mount
   useEffect(() => {
     if (!mounted) return
-    const cached = getCachedEvents(category)
-    if (cached) setMarkets(cached)
-    fetchEventsData(category).then((data) => {
+    // Only use cache for English
+    if (locale === "en") {
+      const cached = getCachedEvents(category)
+      if (cached) setMarkets(cached)
+    }
+    fetchEventsData(category, locale).then((data) => {
       setMarkets(data)
-      if (data.length > 0) setCachedEvents(category, data)
+      if (data.length > 0 && locale === "en") setCachedEvents(category, data)
     }).catch(() => {})
-  }, [category, mounted])
+  }, [category, locale, mounted])
 
   useEffect(() => {
     if (user) fetchWatchlist()
@@ -218,101 +218,33 @@ export default function MarketGrid() {
     }
   }, [user])
 
-  useEffect(() => {
-    if (typeof document === "undefined") return
-    if (isSpinning) {
-      bodyOverflowRef.current = document.body.style.overflow
-      document.body.style.overflow = "hidden"
-    } else if (bodyOverflowRef.current !== undefined) {
-      document.body.style.overflow = bodyOverflowRef.current
-      bodyOverflowRef.current = undefined
-    }
-    return () => {
-      if (bodyOverflowRef.current !== undefined) {
-        document.body.style.overflow = bodyOverflowRef.current
-        bodyOverflowRef.current = undefined
-      }
-    }
-  }, [isSpinning])
-
-  const columns = useMemo(() => {
-    const cols = [[], [], []]
-    markets.forEach((market, idx) => cols[idx % 3].push(market))
-    return cols
-  }, [markets])
-
-  useEffect(() => {
-    return () => {
-      spinTimers.current.forEach(clearTimeout)
-      spinTimers.current = []
-    }
-  }, [])
-
-  function startSpin() {
-    if (!markets.length) return
-    spinTimers.current.forEach(clearTimeout)
-    spinTimers.current = []
-    setIsSpinning(true)
-    setSpinningColumns([true, true, true])
-    setSpinKey((k) => k + 1)
-    const durations = [1400, 2000, 2600]
-    durations.forEach((duration, idx) => {
-      const timer = setTimeout(() => {
-        setSpinningColumns((prev) => prev.map((v, i) => (i === idx ? false : v)))
-        if (idx === durations.length - 1) setIsSpinning(false)
-      }, duration)
-      spinTimers.current.push(timer)
-    })
-  }
-
   // Show skeleton cards only when not mounted yet
   const showSkeleton = !mounted
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 pb-16 relative">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
         {showSkeleton ? (
-          // Skeleton loading
           Array.from({ length: 9 }).map((_, i) => (
-            <div key={`skeleton-${i}`} className="slot-item">
-              <SkeletonCard />
-            </div>
+            <SkeletonCard key={`skeleton-${i}`} />
           ))
         ) : markets.length === 0 ? (
           null
         ) : (
-          columns.map((column, colIdx) => {
-            const spinning = spinningColumns[colIdx]
-            const renderItems = spinning ? [...column, ...column] : column
-            return (
-              <div
-                key={`slot-column-${colIdx}`}
-                className={`slot-column ${spinning ? "slot-column--spinning" : ""}`}
-                style={{ ["--slot-speed"]: `${0.22 + colIdx * 0.04}s` }}
-              >
-                <div className="slot-track flex flex-col gap-5 md:gap-6">
-                  {renderItems.map((market, idx) => (
-                    <div key={`${market.id}-${idx}`} className="slot-item">
-                      <MarketCard
-                        market={market}
-                        spinKey={spinKey}
-                        isWatched={watchedIds.has(market.id)}
-                        onToggleWatchlist={toggleWatchlist}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })
+          markets.map((market) => (
+            <MarketCard
+              key={market.id}
+              market={market}
+              isWatched={watchedIds.has(market.id)}
+              onToggleWatchlist={toggleWatchlist}
+            />
+          ))
         )}
       </div>
 
       {mounted && markets.length === 0 && (
         <div className="text-center text-muted-foreground py-20 font-display text-xl">No markets available</div>
       )}
-
-      <SlotLever onPull={startSpin} disabled={!markets.length} isSpinning={isSpinning} />
     </div>
   )
 }
