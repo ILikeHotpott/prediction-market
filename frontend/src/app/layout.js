@@ -3,6 +3,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { PortfolioProvider } from "@/components/PortfolioProvider";
 import { LanguageProvider } from "@/components/LanguageProvider";
+import MobileBottomNav from "@/components/MobileBottomNav";
 
 export const metadata = {
   title: "Monofuture - Prediction Market",
@@ -21,7 +22,10 @@ export default function RootLayout({ children }) {
         >
           <LanguageProvider>
             <AuthProvider>
-              <PortfolioProvider>{children}</PortfolioProvider>
+              <PortfolioProvider>
+                {children}
+                <MobileBottomNav />
+              </PortfolioProvider>
             </AuthProvider>
           </LanguageProvider>
         </ThemeProvider>

@@ -92,6 +92,7 @@ export default function MarketChartRecharts({
   selectedOptionId,
   selectedAction,
   refreshTrigger = 0,
+  scrolled = false,
 }) {
   const [interval, setInterval] = useState("1H")
   const [allData, setAllData] = useState({})
@@ -242,25 +243,25 @@ export default function MarketChartRecharts({
   }
 
   return (
-    <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] overflow-hidden">
-      <div className="px-6 pt-5 pb-4">
-        <div className="flex items-center gap-3 mb-2">
-          {coverUrl && <img src={coverUrl} alt="" className="w-12 h-12 rounded-lg object-cover" />}
-          <h2 className="text-xl font-bold text-slate-900">{eventTitle || market?.title}</h2>
+    <div className="bg-[#446f55] lg:bg-[#f9f6ee] lg:rounded-2xl lg:border lg:border-[#e6ddcb] lg:mt-6 overflow-hidden">
+      <div className={`px-4 lg:px-6 transition-all duration-300 lg:pt-5 lg:pb-4 ${scrolled ? 'pt-3 pb-2' : 'pt-5 pb-4'}`}>
+        <div className={`flex items-center mb-2 transition-all duration-300 lg:gap-3 ${scrolled ? 'gap-2' : 'gap-3'}`}>
+          {coverUrl && <img src={coverUrl} alt="" className={`rounded-lg object-cover transition-all duration-300 lg:w-12 lg:h-12 ${scrolled ? 'w-8 h-8' : 'w-12 h-12'}`} />}
+          <h2 className={`font-bold text-white lg:text-slate-900 lg:text-xl transition-all duration-300 ${scrolled ? 'text-base' : 'text-xl'}`}>{eventTitle || market?.title}</h2>
         </div>
         <div className="flex items-baseline gap-3">
-          <span className="text-4xl font-bold text-slate-900">{prob != null ? `${prob.toFixed(0)}%` : "—"}</span>
-          <span className="text-lg text-slate-600">chance</span>
+          <span className="text-4xl font-bold text-white lg:text-slate-900">{prob != null ? `${prob.toFixed(0)}%` : "—"}</span>
+          <span className="text-lg text-gray-400 lg:text-slate-600">chance</span>
         </div>
       </div>
 
       {isMulti && chartData.lines.length > 1 && (
-        <div className="px-6 pb-3 flex flex-wrap gap-4 text-sm">
+        <div className="px-4 lg:px-6 pb-3 flex flex-wrap gap-4 text-sm">
           {chartData.lines.map(line => (
             <button key={line.id} onClick={() => onSelectMarket?.(markets.find(m => m.id === line.id))} className="flex items-center gap-2 hover:opacity-80">
               <span className="w-3 h-3 rounded-full" style={{ backgroundColor: line.color }} />
-              <span className="text-slate-700">{line.label}</span>
-              {line.prob != null && <span className="text-slate-500">({line.prob.toFixed(0)}%)</span>}
+              <span className="text-gray-300 lg:text-slate-700">{line.label}</span>
+              {line.prob != null && <span className="text-gray-500 lg:text-slate-500">({line.prob.toFixed(0)}%)</span>}
             </button>
           ))}
         </div>
@@ -299,14 +300,14 @@ export default function MarketChartRecharts({
         </ResponsiveContainer>
       </div>
 
-      <div className="px-6 py-4 flex gap-2 border-t border-[#e6ddcb]">
+      <div className="px-4 lg:px-6 py-4 flex gap-2 border-t border-gray-700 lg:border-[#e6ddcb]">
         {INTERVALS.map(int => (
           <button
             key={int}
             onClick={() => setInterval(int)}
             onMouseEnter={() => fetchData(marketIds, int)}
             className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-              interval === int ? "bg-[#4b6ea9] text-white" : "text-slate-600 hover:text-slate-900 hover:bg-[#e6ddcb]"
+              interval === int ? "bg-[#4b6ea9] text-white" : "text-gray-400 lg:text-slate-600 hover:text-white lg:hover:text-slate-900 hover:bg-gray-700 lg:hover:bg-[#e6ddcb]"
             }`}
           >
             {int}
@@ -315,52 +316,92 @@ export default function MarketChartRecharts({
       </div>
 
       {!hideOutcomes && isMulti && markets.length > 0 && (
-        <div className="border-t border-[#e6ddcb] px-6 py-4">
-          <div className="flex items-center justify-between mb-3 text-xs text-slate-600 uppercase">
-            <span>Outcome</span>
-            <span>Chance</span>
-          </div>
-          <div className="space-y-2">
+        <div className="border-t border-gray-700 lg:border-[#e6ddcb] lg:px-6 lg:py-4">
+          {/* Mobile: Edge-to-edge layout */}
+          <div className="lg:hidden">
             {sortedMarkets.map((m, i) => {
               const opt = m.options?.find(o => o.side === "yes") || m.options?.[0]
               const p = opt?.probability_bps != null ? opt.probability_bps / 100 : 0
               const pDisp = p > 0 && p < 1 ? "<1" : Math.round(p)
               const yPrice = opt?.probability_bps != null ? `${(opt.probability_bps / 100).toFixed(1)}¢` : "—"
               const nPrice = opt?.probability_bps != null ? `${((10000 - opt.probability_bps) / 100).toFixed(1)}¢` : "—"
-              const sel = String(m.id) === String(selectedOptionId)
-              const yAct = sel && selectedAction === "yes"
-              const nAct = sel && selectedAction === "no"
 
               return (
-                <div key={m.id} className="flex items-center justify-between py-2 border-b border-[#e6ddcb] last:border-0">
-                  <div className="flex items-center gap-3">
-                    {i < 4 && <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[i] }} />}
-                    <span className="text-slate-900 font-medium">{m.bucket_label || m.title}</span>
+                <div key={m.id} className="px-4 py-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="text-white font-medium text-base">{m.bucket_label || m.title}</div>
+                      <div className="text-gray-400 text-xs mt-1">
+                        ${(m.volume_24h || 0).toLocaleString()} Vol.
+                      </div>
+                    </div>
+                    <span className="text-white font-bold text-2xl ml-3">{pDisp}%</span>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-slate-900 font-semibold w-14 text-right">{pDisp}%</span>
-                    <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => onSelectMarket?.(m, "yes")}
+                      className="py-3 text-sm font-semibold rounded-lg transition-colors bg-emerald-700 hover:bg-emerald-600 text-white"
+                    >
+                      Buy Yes {yPrice}
+                    </button>
+                    <button
+                      onClick={() => onSelectMarket?.(m, "no")}
+                      className="py-3 text-sm font-semibold rounded-lg transition-colors bg-red-700 hover:bg-red-600 text-white"
+                    >
+                      Buy No {nPrice}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop: Table layout */}
+          <div className="hidden lg:block">
+            <div className="flex items-center justify-between mb-4 text-sm font-semibold text-slate-600 uppercase">
+              <span>OUTCOME</span>
+              <span>CHANCE</span>
+            </div>
+            <div className="space-y-3">
+              {sortedMarkets.map((m, i) => {
+                const opt = m.options?.find(o => o.side === "yes") || m.options?.[0]
+                const p = opt?.probability_bps != null ? opt.probability_bps / 100 : 0
+                const pDisp = p > 0 && p < 1 ? "<1" : Math.round(p)
+                const yPrice = opt?.probability_bps != null ? `${(opt.probability_bps / 100).toFixed(1)}¢` : "—"
+                const nPrice = opt?.probability_bps != null ? `${((10000 - opt.probability_bps) / 100).toFixed(1)}¢` : "—"
+                const isSelected = m.id === selectedOptionId
+                const isYesSelected = isSelected && selectedAction === "yes"
+                const isNoSelected = isSelected && selectedAction === "no"
+
+                return (
+                  <div key={m.id} className="flex items-center justify-between py-3">
+                    <div className="flex items-center gap-3 flex-1">
+                      {i < COLORS.length && <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i] }} />}
+                      <span className="text-slate-900 font-medium">{m.bucket_label || m.title}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-slate-900 font-bold text-lg w-16 text-right">{pDisp}%</span>
                       <button
                         onClick={() => onSelectMarket?.(m, "yes")}
-                        className={`w-24 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                          yAct ? "bg-emerald-700 text-white" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                        className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${
+                          isYesSelected ? "bg-emerald-700 text-white shadow-sm" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
                         }`}
                       >
                         Yes {yPrice}
                       </button>
                       <button
                         onClick={() => onSelectMarket?.(m, "no")}
-                        className={`w-24 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                          nAct ? "bg-red-700 text-white" : "bg-red-100 text-red-800 hover:bg-red-200"
+                        className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${
+                          isNoSelected ? "bg-red-700 text-white shadow-sm" : "bg-red-100 text-red-800 hover:bg-red-200"
                         }`}
                       >
                         No {nPrice}
                       </button>
                     </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         </div>
       )}

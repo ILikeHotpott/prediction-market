@@ -12,7 +12,7 @@
   --foreground: #F3E1B6; /* Cream */
 
   /* Card blues (older ink poster blue) */
-  --card: #445FAE; /* Card Base */
+  --card: #2d5a45; /* Card Base */
   --card-foreground: #F3E1B6;
   --popover: #1F2B24;
   --popover-foreground: #F3E1B6;
@@ -30,7 +30,7 @@
   --destructive-foreground: #F3E1B6;
 
   /* Muted edges */
-  --muted: #354A8E; /* Card Shade */
+  --muted: #1a3d2e; /* Card Shade */
   --muted-foreground: #B9C6E9;
 
   --border: rgba(243, 225, 182, 0.28);
@@ -60,7 +60,7 @@
   --app-background: #446f55;
   --background: var(--app-background);
   --foreground: #F3E1B6;
-  --card: #445FAE;
+  --card: #2d5a45;
   --card-foreground: #F3E1B6;
   --popover: #1F2B24;
   --popover-foreground: #F3E1B6;
@@ -68,7 +68,7 @@
   --primary-foreground: #1F2B24;
   --secondary: #2F6B4A;
   --secondary-foreground: #F3E1B6;
-  --muted: #354A8E;
+  --muted: #1a3d2e;
   --muted-foreground: #B9C6E9;
   --accent: #F2C35B;
   --accent-foreground: #1F2B24;

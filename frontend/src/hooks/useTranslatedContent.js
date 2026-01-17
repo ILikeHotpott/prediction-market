@@ -1,59 +1,36 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { useLanguage } from "@/components/LanguageProvider";
 
-const backendBase =
-  typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
-    : "";
-
-async function fetchTranslations(entityType, entityIds, fields, lang) {
-  if (lang === "en" || !entityIds.length) return {};
-
-  const params = new URLSearchParams({
-    entity_type: entityType,
-    entity_ids: entityIds.join(","),
-    fields: fields.join(","),
-    lang,
-  });
-
-  const res = await fetch(`${backendBase}/api/translate/?${params}`);
-  if (!res.ok) return {};
-
-  const data = await res.json();
-  return data.translations || {};
-}
-
+/**
+ * Instant translation hook - no API calls, uses embedded translations.
+ * Translations are pre-loaded in the initial API response.
+ */
 export function useTranslatedContent(entityType, entities, fields = ["title"]) {
   const { locale } = useLanguage();
 
-  const entityIds = entities?.map((e) => e?.id).filter(Boolean) || [];
+  return useMemo(() => {
+    if (!entities || locale === "en") return entities;
 
-  const { data: translations = {} } = useQuery({
-    queryKey: ["translations", entityType, entityIds.join(","), fields.join(","), locale],
-    queryFn: () => fetchTranslations(entityType, entityIds, fields, locale),
-    enabled: locale !== "en" && entityIds.length > 0,
-    staleTime: 1000 * 60 * 60, // 1 hour
-    cacheTime: 1000 * 60 * 60 * 24, // 24 hours
-  });
+    return entities.map((entity) => {
+      if (!entity?.id) return entity;
 
-  // Return entities with translated fields
-  return entities?.map((entity) => {
-    if (!entity?.id || locale === "en") return entity;
+      // Check if entity has embedded translations
+      const translations = entity.translations?.[locale];
+      if (!translations) return entity;
 
-    const entityTranslations = translations[String(entity.id)];
-    if (!entityTranslations) return entity;
-
-    return {
-      ...entity,
-      ...Object.fromEntries(
-        fields
-          .filter((f) => entityTranslations[f])
-          .map((f) => [f, entityTranslations[f]])
-      ),
-    };
-  });
+      // Apply translations to requested fields
+      return {
+        ...entity,
+        ...Object.fromEntries(
+          fields
+            .filter((f) => translations[f])
+            .map((f) => [f, translations[f]])
+        ),
+      };
+    });
+  }, [entities, locale, fields]);
 }
 
 export function useTranslatedEntity(entityType, entity, fields = ["title"]) {

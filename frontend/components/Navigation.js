@@ -4,7 +4,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, Menu, X, User, Trophy, Bookmark, LogOut, Wallet, Globe } from "lucide-react";
+import { Bell, Menu, X, User, Trophy, Bookmark, LogOut, Wallet, Globe, Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { useTranslations } from "next-intl";
 import SearchDropdown from "@/components/SearchDropdown";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import Logo from "@/components/Logo";
 import DepositModal from "@/components/DepositModal";
 import { NAV_CATEGORIES } from "@/lib/constants/categories";
 import LanguageSelector from "@/components/LanguageSelector";
+import MobileSidebar from "@/components/MobileSidebar";
 
 const backendBase =
   typeof window !== "undefined"
@@ -36,6 +37,7 @@ export default function Navigation() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [navCategories, setNavCategories] = useState(NAV_CATEGORIES);
   const dropdownRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
@@ -118,19 +120,65 @@ export default function Navigation() {
   const fmt = (n) => `$${Number(n || 0).toFixed(2)}`;
 
   return (
-    <nav className="sticky top-0 z-50 bg-background border-b border-white/10 shadow-md mb-6">
+    <nav className="sticky top-0 z-50 bg-background shadow-md">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12">
-        <div className="flex items-center justify-center md:justify-between h-20 gap-3 relative">
-          {/* Retro Casino Logo */}
-          <Link href="/" className="flex items-center gap-2 group shrink-0">
-            <div className="w-[180px] sm:w-[240px] md:w-[280px]">
+        {/* Mobile Header */}
+        <div className="flex md:hidden items-center justify-between h-16 gap-3">
+          <Link href="/" className="flex items-center -ml-2">
+            <div className="w-[160px] flex items-center -mt-4">
               <Logo />
             </div>
           </Link>
 
-          <SearchDropdown className="flex-1 max-w-xl hidden md:block" />
+          <div className="flex items-center gap-3">
+            {!isAuthed ? (
+              <>
+                <button
+                  className="text-[#4A90E2] hover:text-white font-semibold text-sm"
+                  onClick={() => openAuthModal("login")}
+                >
+                  Log In
+                </button>
+                <Button
+                  className="bg-[#4A90E2] hover:bg-[#357ABD] text-white font-semibold text-sm h-9 px-4 rounded-lg"
+                  onClick={() => openAuthModal("signup")}
+                >
+                  Sign Up
+                </Button>
+              </>
+            ) : (
+              <>
+                <LanguageSelector onSelect={() => {}} compact />
+                <Bell className="w-6 h-6 text-white/60" />
+                <button
+                  onClick={() => setMobileSidebarOpen(true)}
+                  className="w-9 h-9 rounded-full bg-white/10 overflow-hidden flex items-center justify-center"
+                >
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="User" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-white font-bold text-sm">{displayName.charAt(0)}</span>
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
 
-          <div className="flex items-center gap-3 absolute right-0 md:relative">
+        {/* Desktop Header */}
+        <div className="hidden md:flex items-center justify-between h-20 gap-3">
+          {/* Left side: Logo and Search */}
+          <div className="flex items-center gap-4 flex-1">
+            <Link href="/" className="flex items-center gap-2 group shrink-0">
+              <div className="w-[180px] sm:w-[240px] md:w-[280px]">
+                <Logo />
+              </div>
+            </Link>
+            <SearchDropdown className="flex-1 max-w-lg" />
+          </div>
+
+          {/* Right side: User controls */}
+          <div className="flex items-center gap-3">
             <div className="hidden md:flex items-center gap-5">
               {!isAuthed ? (
                 <>
@@ -178,9 +226,9 @@ export default function Navigation() {
                   >
                     {t("deposit")}
                   </Button>
+                  <LanguageSelector onSelect={() => {}} compact />
                   <Bell className="w-6 h-6 text-muted-foreground cursor-pointer hover:text-accent transition-colors" />
 
-                  {/* Custom hover dropdown - no flickering */}
                   <div
                     ref={dropdownRef}
                     className="relative"
@@ -255,17 +303,33 @@ export default function Navigation() {
                 </>
               )}
             </div>
-
-            <button
-              className="md:hidden p-2 rounded-lg hover:bg-white/10 text-white"
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              aria-label="Toggle menu"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
           </div>
         </div>
 
+        {/* Mobile Category Pills */}
+        <div className="md:hidden flex gap-6 overflow-x-auto scrollbar-hide py-3 px-4">
+          <Link
+            href="/"
+            className={`text-sm font-medium whitespace-nowrap ${
+              !currentCategory ? "text-white" : "text-white/60"
+            }`}
+          >
+            All
+          </Link>
+          {navCategories.map((category) => (
+            <Link
+              key={category.value}
+              href={`/?category=${category.value}`}
+              className={`text-sm font-medium whitespace-nowrap ${
+                currentCategory === category.value ? "text-white" : "text-white/60"
+              }`}
+            >
+              {category.label}
+            </Link>
+          ))}
+        </div>
+
+        {/* Desktop Navigation Tabs */}
         <div className="hidden md:flex gap-6 overflow-x-auto scrollbar-hide pt-4 pb-0 border-b border-white/10">
           {navCategories.map((category) => {
             const isActive = currentCategory === category.value;
@@ -286,102 +350,6 @@ export default function Navigation() {
             );
           })}
         </div>
-
-        {mobileMenuOpen && (
-          <div className="md:hidden pb-4 space-y-4 border-t border-white/10 pt-4 bg-background">
-            <SearchDropdown />
-
-            <div className="flex flex-col gap-3">
-              {!isAuthed ? (
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button
-                    variant="ghost"
-                    className="text-accent hover:text-white sm:flex-1 uppercase font-bold"
-                    onClick={() => openAuthModal("login")}
-                  >
-                    {t("login")}
-                  </Button>
-                  <Button
-                    className="bg-primary hover:bg-primary/90 text-white sm:flex-1 uppercase font-bold"
-                    onClick={() => openAuthModal("signup")}
-                  >
-                    {t("signup")}
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                    <Link href="/profile" className="w-10 h-10 rounded-full bg-gray-600 overflow-hidden flex items-center justify-center flex-shrink-0">
-                      {avatarUrl ? (
-                        <img src={avatarUrl} alt="User" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-white font-semibold">
-                          {displayName.charAt(0)}
-                        </span>
-                      )}
-                    </Link>
-                    <div className="flex-1 min-w-0">
-                      <Link href="/profile" className="text-white font-semibold truncate font-display block hover:text-accent">{displayName}</Link>
-                      {walletLabel && <div className="text-xs text-gray-400 truncate">{walletLabel}</div>}
-                    </div>
-                    <button className="text-red-300 text-sm font-bold uppercase" onClick={signOut}>
-                      {t("logout")}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <Link href="/portfolio" className="flex-1">
-                      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                        <div className="text-xs text-muted-foreground font-bold uppercase">{t("portfolio")}</div>
-                        {navLoading ? (
-                          <Skeleton className="h-5 w-24" style={{ background: 'rgba(255,255,255,0.15)' }} />
-                        ) : (
-                          <div className="text-lg font-semibold text-secondary font-display">{fmt(navPortfolio)}</div>
-                        )}
-                        <div className="text-xs text-muted-foreground font-bold uppercase">
-                          {t("cash")}{" "}
-                          {navLoading ? (
-                            <Skeleton className="h-4 w-20 inline-block align-middle" style={{ background: 'rgba(255,255,255,0.15)' }} />
-                          ) : (
-                            fmt(navCash)
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                    <Button
-                      style={{ backgroundColor: '#E15646', color: 'white' }}
-                      className="flex-shrink-0 font-bold h-12 px-4 uppercase hover:opacity-90"
-                      onClick={() => setDepositModalOpen(true)}
-                    >
-                      {t("deposit")}
-                    </Button>
-                    <Bell className="w-5 h-5 text-gray-300 flex-shrink-0" />
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="flex gap-3 overflow-x-auto scrollbar-hide pt-1 pb-1">
-              {navCategories.map((category) => {
-                const isActive = currentCategory === category.value;
-                return (
-                  <Link
-                    key={category.value}
-                    href={`/?category=${category.value}`}
-                    onMouseEnter={() => prefetchCategory(category.value)}
-                    className={`whitespace-nowrap px-3 py-2 rounded-full border capitalize font-medium text-xs ${
-                      isActive
-                        ? "text-accent bg-accent/10 border-accent"
-                        : "text-muted-foreground hover:text-white bg-white/5 border-white/10"
-                    }`}
-                  >
-                    {category.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
 
       <DepositModal
@@ -389,6 +357,11 @@ export default function Navigation() {
         onClose={() => setDepositModalOpen(false)}
         user={user}
         onSuccess={() => refreshPortfolio()}
+      />
+
+      <MobileSidebar
+        isOpen={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
       />
     </nav>
   );

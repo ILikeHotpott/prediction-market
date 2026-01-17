@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from ..models import Event, Market, MarketOption, MarketOptionStats
+from ..models import Event, Market, MarketOption, MarketOptionStats, EventTranslation
 from ..services.amm.setup import AmmSetupError, ensure_pool_initialized, normalize_amm_params
 from ..services.auth import get_user_from_request, require_admin
 from ..services.events import binary_options_from_payload
@@ -111,9 +111,11 @@ def _prefetched_event(event_id):
     markets_qs = Market.objects.order_by("sort_weight", "-created_at").prefetch_related(
         Prefetch("options", queryset=options_qs, to_attr="prefetched_options")
     )
+    translations_qs = EventTranslation.objects.all()
     return (
         Event.objects.prefetch_related(
-            Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets")
+            Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
+            Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations")
         )
         .get(pk=event_id)
     )
@@ -405,8 +407,12 @@ def list_events(request):
     if not is_admin:
         markets_qs = markets_qs.filter(status="active", is_hidden=False)
 
+    # Always prefetch ALL translations for instant language switching
+    translations_qs = EventTranslation.objects.all()
+
     events_qs = Event.objects.order_by("-sort_weight", "-created_at").prefetch_related(
-        Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets")
+        Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
+        Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations")
     )
     if not is_admin and not request.GET.get("all"):
         events_qs = events_qs.filter(status="active", is_hidden=False)
@@ -420,7 +426,7 @@ def list_events(request):
         id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
         events_qs = events_qs.filter(id__in=id_list)
 
-    items = [serialize_event(e, lang) for e in events_qs[:100]]
+    items = [serialize_event(e, lang, include_all_translations=True) for e in events_qs[:100]]
     result = {"items": items}
 
     # Cache the result (only for non-admin and English)
@@ -455,7 +461,7 @@ def get_event(request, event_id):
         if not (user and user.role == "admin"):
             return JsonResponse({"error": "Event not available"}, status=404)
 
-    result = serialize_event(event, lang)
+    result = serialize_event(event, lang, include_all_translations=True)
     # Cache the result (only for English)
     if lang == "en":
         set_cached_event_detail(str(event_id), result)
@@ -517,6 +523,14 @@ def create_event(request):
     }
 
     event = _create_event_with_markets(event_fields, markets_data, amm_params_list, payload, created_by)
+
+    # Auto-translate event title and description to all supported languages
+    try:
+        from ..services.translation import translate_event
+        translate_event(event)
+    except Exception as e:
+        logger.warning("Failed to auto-translate event %s: %s", event.id, e)
+
     event = _prefetched_event(event.id)
     event_data = serialize_event(event)
     _index_event_async(event_data)
@@ -557,8 +571,8 @@ def publish_event(request, event_id):
 
     event = _prefetched_event(event_id)
     event_data = serialize_event(event)
-    # Full reindex when event becomes active
-    _reindex_all_events_async()
+    # Index the published event
+    _index_event_async(event_data)
     # Invalidate caches
     invalidate_on_event_change(str(event_id))
     return JsonResponse(event_data, status=200)
@@ -601,10 +615,8 @@ def update_event_status(request, event_id):
     # Only delete from search index when canceled (resolved events stay visible for 3 days)
     if new_status == "canceled":
         _delete_event_index_async(str(event_id))
-    elif new_status == "active":
-        # Full reindex when event becomes active
-        _reindex_all_events_async()
     else:
+        # Index the updated event
         _index_event_async(event_data)
     return JsonResponse(event_data, status=200)
 

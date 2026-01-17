@@ -1,4 +1,5 @@
 from ..models import User
+from ..models.users import UserRole
 
 
 def get_user_from_request(request):
@@ -15,7 +16,7 @@ def require_admin(request):
     user = get_user_from_request(request)
     if not user:
         return {"error": "Unauthorized", "status": 401}
-    if user.role != "admin":
+    if user.role not in UserRole.ADMIN_ROLES:
         return {"error": "Forbidden", "status": 403}
     return None
 

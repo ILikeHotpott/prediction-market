@@ -151,7 +151,7 @@ export function AuthProvider({ children }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    supabase.auth.signOut().catch(() => {}); // Ignore API errors
     router.push("/");
   };
 

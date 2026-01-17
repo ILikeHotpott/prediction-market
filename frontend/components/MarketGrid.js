@@ -222,7 +222,7 @@ export default function MarketGrid() {
   const showSkeleton = !mounted
 
   return (
-    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 pb-16 relative">
+    <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 lg:mt-6 pb-16 relative">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
         {showSkeleton ? (
           Array.from({ length: 9 }).map((_, i) => (

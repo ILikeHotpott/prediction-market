@@ -22,14 +22,13 @@ CACHE_TTL = {
 }
 
 # Time range for each interval
-# Optimized: reduced max_points to minimize egress (A1 optimization)
-# Frontend should use incremental fetch for real-time updates
+# Extreme optimization: minimal points to reduce egress by 70%+
 INTERVAL_CONFIG = {
-    "1H": {"hours": 1, "max_points": 60, "bucket_minutes": 1},      # 60 points max
-    "6H": {"hours": 6, "max_points": 72, "bucket_minutes": 5},      # 72 points max
-    "1D": {"hours": 24, "max_points": 96, "bucket_minutes": 15},    # 96 points max
-    "1W": {"hours": 168, "max_points": 120, "bucket_minutes": 60},  # 120 points (was 168)
-    "ALL": {"hours": None, "max_points": 200, "bucket_minutes": 240},  # 200 points (was 300)
+    "1H": {"hours": 1, "max_points": 30, "bucket_minutes": 2},      # 30 points (was 60)
+    "6H": {"hours": 6, "max_points": 36, "bucket_minutes": 10},     # 36 points (was 72)
+    "1D": {"hours": 24, "max_points": 48, "bucket_minutes": 30},    # 48 points (was 96)
+    "1W": {"hours": 168, "max_points": 56, "bucket_minutes": 180},  # 56 points (was 120)
+    "ALL": {"hours": None, "max_points": 100, "bucket_minutes": 360},  # 100 points (was 200)
 }
 
 
@@ -180,8 +179,8 @@ def _get_option_series(
     if start_time is not None:
         query = query.filter(bucket_start__gte=start_time)
 
-    # Fetch more points than needed for better downsampling
-    fetch_limit = min(max_points * 3 if bucket_minutes > 1 else max_points, 1000)
+    # Fetch minimal points to reduce DB egress
+    fetch_limit = min(max_points * 2 if bucket_minutes > 1 else max_points, 500)
 
     rows = list(
         query.values("bucket_start", "value_bps")

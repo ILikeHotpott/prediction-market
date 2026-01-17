@@ -58,7 +58,7 @@ def serialize_market(market: Market):
     }
 
 
-def serialize_event(event: Event, lang: str = "en"):
+def serialize_event(event: Event, lang: str = "en", include_all_translations: bool = False):
     markets = []
     if hasattr(event, "prefetched_markets"):
         markets = event.prefetched_markets
@@ -75,9 +75,23 @@ def serialize_event(event: Event, lang: str = "en"):
     title = event.title
     description = event.description
 
-    # Get translation if not English
+    # Build translations dict for all languages
+    translations = {}
+    if include_all_translations:
+        # Get all translations at once
+        if hasattr(event, "prefetched_translations"):
+            trans_list = event.prefetched_translations
+        else:
+            trans_list = EventTranslation.objects.filter(event_id=event.id)
+
+        for trans in trans_list:
+            translations[trans.language] = {
+                "title": trans.title,
+                "description": trans.description or event.description,
+            }
+
+    # Get translation for current language if not English
     if lang != "en":
-        # Check prefetched translations first
         if hasattr(event, "prefetched_translations"):
             trans = next((t for t in event.prefetched_translations if t.language == lang), None)
             if trans:
@@ -85,7 +99,6 @@ def serialize_event(event: Event, lang: str = "en"):
                 if trans.description:
                     description = trans.description
         else:
-            # Query directly
             try:
                 trans = EventTranslation.objects.get(event_id=event.id, language=lang)
                 title = trans.title
@@ -94,7 +107,7 @@ def serialize_event(event: Event, lang: str = "en"):
             except EventTranslation.DoesNotExist:
                 pass
 
-    return {
+    result = {
         "id": str(event.id),
         "title": title,
         "description": description,
@@ -116,3 +129,8 @@ def serialize_event(event: Event, lang: str = "en"):
         "markets": market_payload,
         "primary_market": primary_market,
     }
+
+    if include_all_translations and translations:
+        result["translations"] = translations
+
+    return result

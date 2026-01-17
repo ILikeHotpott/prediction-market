@@ -374,32 +374,36 @@ def _update_stats_volume(option_id: str, amount_delta: Decimal, now):
 def _record_price_series(option_states: List[AmmPoolOptionState], prob_bps: List[int], now):
     """
     Record price history to market_option_series table after a trade.
-    Each trade creates a new data point with exact timestamp (microsecond precision).
-    If a record already exists for the same (option_id, interval, bucket_start), update it.
+    Uses 1-minute time buckets and UPSERT to minimize storage.
+    Rounds timestamp to nearest minute to deduplicate high-frequency trades.
 
     This is best-effort and should never fail the trade.
     """
     try:
+        # Round to 1-minute bucket to deduplicate
+        bucket_time = now.replace(second=0, microsecond=0)
+
         rows = []
         for st, prob in zip(option_states, prob_bps):
-            # Access option fields directly from the already-loaded related object
-            # to avoid triggering additional queries or locks
             opt = st.option
             rows.append(MarketOptionSeries(
                 option_id=opt.id,
                 market_id=opt.market_id,
                 interval="1M",
-                bucket_start=now,
+                bucket_start=bucket_time,
                 value_bps=prob,
-                created_at=now,
+                created_at=bucket_time,
             ))
 
         if rows:
-            # Use bulk_create without update_conflicts to avoid lock contention
-            # If there's a conflict, just skip it - we'll get the next trade's data
-            MarketOptionSeries.objects.bulk_create(rows, ignore_conflicts=True)
+            # UPSERT: update existing bucket or insert new
+            MarketOptionSeries.objects.bulk_create(
+                rows,
+                update_conflicts=True,
+                update_fields=["value_bps", "created_at"],
+                unique_fields=["option_id", "interval", "bucket_start"]
+            )
     except Exception as e:
-        # Silently ignore all errors - price series is non-critical
         logger.warning("Failed to record price series: %s", e)
 
 

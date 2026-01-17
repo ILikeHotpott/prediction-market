@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useMemo } from "react"
 import Navigation from "@/components/Navigation"
+import MobileBottomNav from "@/components/MobileBottomNav"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -146,10 +147,10 @@ export default function LeaderboardPage() {
 
         {/* Table Header */}
         <div className="flex items-center px-4 py-3 text-xs font-semibold text-white/50 uppercase tracking-wider">
-          <span className="w-16">{t("rank")}</span>
+          <span className="w-12 sm:w-16">{t("rank")}</span>
           <span className="flex-1">{t("trader")}</span>
-          <span className="w-32 text-right">{t("profitLoss")}</span>
-          <span className="w-32 text-right">{t("volume")}</span>
+          <span className="w-20 sm:w-32 text-right">{t("profitLoss")}</span>
+          <span className="hidden sm:block w-32 text-right">{t("volume")}</span>
         </div>
 
         {/* Leaderboard List */}
@@ -178,11 +179,11 @@ export default function LeaderboardPage() {
                     }`}
                   >
                     {/* Rank */}
-                    <div className="w-16 flex items-center">
+                    <div className="w-12 sm:w-16 flex items-center">
                       {rankIcon ? (
-                        <span className="text-2xl">{rankIcon}</span>
+                        <span className="text-xl sm:text-2xl">{rankIcon}</span>
                       ) : (
-                        <span className="text-white/40 font-semibold text-lg">
+                        <span className="text-white/40 font-semibold text-base sm:text-lg">
                           #{u.rank}
                         </span>
                       )}
@@ -190,17 +191,17 @@ export default function LeaderboardPage() {
 
                     {/* User Info */}
                     <div className="flex-1 flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden ring-2 ring-white/10">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden ring-2 ring-white/10 flex-shrink-0">
                         {u.avatar_url ? (
                           <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          <span className="text-white text-sm font-semibold">
+                          <span className="text-white text-xs sm:text-sm font-semibold">
                             {(u.display_name || "?")[0].toUpperCase()}
                           </span>
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-semibold text-white truncate">
+                        <div className="font-semibold text-white truncate text-sm sm:text-base">
                           {u.display_name}
                           {u.is_current_user && (
                             <span className="ml-2 text-xs font-medium text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded-full">
@@ -212,14 +213,14 @@ export default function LeaderboardPage() {
                     </div>
 
                     {/* P&L */}
-                    <div className={`w-32 text-right font-bold text-lg ${
+                    <div className={`w-20 sm:w-32 text-right font-bold text-base sm:text-lg ${
                       u.pnl >= 0 ? "text-emerald-400" : "text-red-400"
                     }`}>
                       {formatPnl(u.pnl)}
                     </div>
 
                     {/* Volume */}
-                    <div className="w-32 text-right text-white/60 font-medium">
+                    <div className="hidden sm:block w-32 text-right text-white/60 font-medium">
                       {formatVolume(u.volume)}
                     </div>
                   </div>
@@ -231,23 +232,23 @@ export default function LeaderboardPage() {
                 <>
                   <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
                   <div className="flex items-center px-4 py-4 bg-blue-500/10 border-l-2 border-l-blue-400">
-                    <div className="w-16">
-                      <span className="text-white/40 font-semibold text-lg">
+                    <div className="w-12 sm:w-16">
+                      <span className="text-white/40 font-semibold text-base sm:text-lg">
                         #{data.current_user.rank}
                       </span>
                     </div>
                     <div className="flex-1 flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden ring-2 ring-white/10">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center overflow-hidden ring-2 ring-white/10 flex-shrink-0">
                         {data.current_user.avatar_url ? (
                           <img src={data.current_user.avatar_url} alt="" className="w-full h-full object-cover" />
                         ) : (
-                          <span className="text-white text-sm font-semibold">
+                          <span className="text-white text-xs sm:text-sm font-semibold">
                             {(data.current_user.display_name || "?")[0].toUpperCase()}
                           </span>
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-semibold text-white truncate">
+                        <div className="font-semibold text-white truncate text-sm sm:text-base">
                           {data.current_user.display_name}
                           <span className="ml-2 text-xs font-medium text-blue-300 bg-blue-500/20 px-2 py-0.5 rounded-full">
                             {t("you")}
@@ -255,12 +256,12 @@ export default function LeaderboardPage() {
                         </div>
                       </div>
                     </div>
-                    <div className={`w-32 text-right font-bold text-lg ${
+                    <div className={`w-20 sm:w-32 text-right font-bold text-base sm:text-lg ${
                       data.current_user.pnl >= 0 ? "text-emerald-400" : "text-red-400"
                     }`}>
                       {formatPnl(data.current_user.pnl)}
                     </div>
-                    <div className="w-32 text-right text-white/60 font-medium">
+                    <div className="hidden sm:block w-32 text-right text-white/60 font-medium">
                       {formatVolume(data.current_user.volume)}
                     </div>
                   </div>
@@ -277,6 +278,7 @@ export default function LeaderboardPage() {
           )}
         </div>
       </div>
+      <MobileBottomNav />
     </div>
   )
 }

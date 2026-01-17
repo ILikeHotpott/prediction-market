@@ -8,9 +8,10 @@ from django.utils import timezone
 from ..models import MarketOptionSeries
 
 
-def cleanup_old_series(days_to_keep: int = 30):
+def cleanup_old_series(days_to_keep: int = 7):
     """
     Remove series data older than specified days to prevent table bloat.
+    Aggressive 7-day retention to minimize storage costs.
     """
     cutoff = timezone.now() - timezone.timedelta(days=days_to_keep)
     deleted, _ = MarketOptionSeries.objects.filter(bucket_start__lt=cutoff).delete()

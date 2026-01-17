@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react"
 import Navigation from "@/components/Navigation"
+import MobileBottomNav from "@/components/MobileBottomNav"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { usePortfolio } from "@/components/PortfolioProvider"
 import { Button } from "@/components/ui/button"
@@ -204,6 +205,7 @@ export default function ProfilePage() {
           </div>
         )}
       </div>
+      <MobileBottomNav />
     </div>
   )
 }

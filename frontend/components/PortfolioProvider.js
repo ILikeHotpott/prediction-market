@@ -16,6 +16,7 @@ const PortfolioContext = createContext({
   cash: 0,
   loading: false,
   avatarUrl: null,
+  displayName: null,
   refreshPortfolio: () => {},
 });
 
@@ -25,6 +26,7 @@ export function PortfolioProvider({ children }) {
   const [cash, setCash] = useState(0);
   const [loading, setLoading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  const [displayName, setDisplayName] = useState(null);
 
   // Track last fetch time to implement caching
   const lastFetchTime = useRef(0);
@@ -36,6 +38,7 @@ export function PortfolioProvider({ children }) {
       setPortfolio(0);
       setCash(0);
       setAvatarUrl(null);
+      setDisplayName(null);
       return;
     }
 
@@ -82,10 +85,11 @@ export function PortfolioProvider({ children }) {
       setCash(cashValue);
       setPortfolio(cashValue + portfolioValue);
 
-      // Update avatar from profile
+      // Update avatar and display name from profile
       if (profileRes.ok) {
         const profileData = await profileRes.json();
         setAvatarUrl(profileData.avatar_url || null);
+        setDisplayName(profileData.display_name || null);
       }
 
       lastFetchTime.current = Date.now();
@@ -112,6 +116,7 @@ export function PortfolioProvider({ children }) {
       setPortfolio(0);
       setCash(0);
       setAvatarUrl(null);
+      setDisplayName(null);
       lastFetchTime.current = 0;
       lastUserId.current = null;
     }
@@ -125,7 +130,7 @@ export function PortfolioProvider({ children }) {
   }, [refreshPortfolio]);
 
   return (
-    <PortfolioContext.Provider value={{ portfolio, cash, loading, avatarUrl, refreshPortfolio }}>
+    <PortfolioContext.Provider value={{ portfolio, cash, loading, avatarUrl, displayName, refreshPortfolio }}>
       {children}
     </PortfolioContext.Provider>
   );

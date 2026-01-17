@@ -144,101 +144,95 @@ export default function Comments({ marketId, user, openAuthModal }) {
   )
 
   return (
-    <Card className="text-slate-900 shadow-md border border-[#e6ddcb] bg-[#f9f6ee]">
-      <CardHeader className="pb-4">
+    <Card className="text-slate-900 shadow-none border-0 lg:shadow-md lg:border lg:border-[#e6ddcb] bg-[#446f55] lg:bg-[#f9f6ee] rounded-none lg:rounded-2xl">
+      <CardHeader className="pb-4 px-4 lg:px-6">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <CardTitle className="text-xl font-semibold text-slate-900">{t("title")}</CardTitle>
-            <span className="rounded-full bg-white px-3 py-1 text-sm text-slate-800 border border-[#e6ddcb]">
-              {totalCount.toLocaleString()}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-slate-700">
-            <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
-              {t("topHolders")}
-            </Button>
-            <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
-              {t("activity")}
-            </Button>
-          </div>
+          <CardTitle className="text-xl font-semibold text-white lg:text-slate-900">{t("title")}</CardTitle>
+          <span className="rounded-full bg-gray-700 lg:bg-white px-3 py-1 text-sm text-white lg:text-slate-800 border-0 lg:border lg:border-[#e6ddcb]">
+            {totalCount.toLocaleString()}
+          </span>
+        </div>
+
+        {/* Mobile Tabs */}
+        <div className="flex gap-6 mt-4 lg:hidden border-b border-gray-700">
+          <button className="pb-3 border-b-2 border-blue-500 text-white font-medium text-sm">
+            Comments
+          </button>
+          <button className="pb-3 text-gray-400 hover:text-white text-sm transition-colors">
+            Holders
+          </button>
+          <button className="pb-3 text-gray-400 hover:text-white text-sm transition-colors">
+            Activity
+          </button>
+        </div>
+
+        {/* Desktop Tabs */}
+        <div className="hidden lg:flex items-center gap-2 text-sm text-slate-700 mt-2">
+          <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
+            {t("topHolders")}
+          </Button>
+          <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
+            {t("activity")}
+          </Button>
         </div>
       </CardHeader>
 
-      <CardContent className="pt-0 space-y-6">
-        <div className="rounded-2xl p-2 bg-transparent">
+      <CardContent className="pt-0 space-y-4 px-4 lg:px-6">
+        <div className="lg:rounded-2xl p-0 lg:p-2 bg-transparent">
           <textarea
             rows={3}
             value={drafts.root || ""}
             onChange={(e) => updateDraft("root", e.target.value)}
             placeholder={user ? t("placeholder") : t("placeholderSignIn")}
-            className="w-full bg-white border border-[#e6ddcb] text-slate-900 placeholder:text-slate-500 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4b6ea9]/60 resize-none"
+            className="w-full bg-[#3a5f4a] lg:bg-white border-0 lg:border lg:border-[#e6ddcb] text-white lg:text-slate-900 placeholder:text-gray-400 lg:placeholder:text-slate-500 px-4 py-3 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 lg:focus:ring-[#4b6ea9]/60 resize-none"
             disabled={!user}
           />
-          <div className="flex justify-end pt-3">
+          <div className="flex justify-end items-center pt-3">
             <Button
               onClick={() => submitComment(null)}
               disabled={postingIds.root || !user}
               size="sm"
-              className="px-6 bg-[#4b6ea9] hover:bg-[#3f5e9c] text-white font-semibold rounded-full shadow-sm"
+              className="px-6 bg-[#4b6ea9] hover:bg-[#3f5e9c] disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-full shadow-sm"
             >
               {postingIds.root ? t("posting") : t("submit")}
             </Button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-slate-700 text-sm">{t("filter")}</span>
-            <div className="inline-flex rounded-full bg-white border border-[#e6ddcb] p-1">
-              <button
-                className={`px-4 py-1 text-sm rounded-full transition-colors ${
-                  !holdersOnly ? "bg-[#4b6ea9] text-white shadow-sm" : "text-slate-700 hover:text-slate-900"
-                }`}
-                onClick={() => setHoldersOnly(false)}
-                type="button"
-              >
-                {t("allComments")}
-              </button>
-              <button
-                className={`px-4 py-1 text-sm rounded-full transition-colors ${
-                  holdersOnly ? "bg-[#4b6ea9] text-white shadow-sm" : "text-slate-700 hover:text-slate-900"
-                }`}
-                onClick={() => setHoldersOnly(true)}
-                type="button"
-              >
-                {t("holdersOnly")}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-slate-700 text-sm">{t("sort")}</span>
-            <Select value={sort} onValueChange={(val) => setSort(val)}>
-              <SelectTrigger className="w-36 bg-white border border-[#e6ddcb] text-slate-900 rounded-full px-4 py-2 h-10 focus:ring-2 focus:ring-[#4b6ea9]/60">
-                <SelectValue placeholder={t("sort")} />
-              </SelectTrigger>
-              <SelectContent
-                className="text-slate-900 border border-[#e6ddcb] bg-white"
-              >
-                <SelectItem value="newest">{t("newest")}</SelectItem>
-                <SelectItem value="oldest">{t("oldest")}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* <div className="ml-auto text-amber-300/90 text-sm flex items-center gap-2">
-            <span className="text-lg">⚠️</span>
-            <span>Beware of external links.</span>
-          </div> */}
+        {/* Warning Banner - Mobile */}
+        <div className="lg:hidden bg-[#3a5f4a] text-gray-300 rounded-lg p-3 flex items-center gap-2 text-sm">
+          <span className="text-lg">🛡️</span>
+          <span>Beware of external links.</span>
         </div>
 
-        {error && <div className="text-red-600 text-sm">{error}</div>}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            className={`px-4 py-2 text-sm rounded-full font-medium transition-colors ${
+              !holdersOnly ? "bg-gray-700 text-white" : "bg-transparent text-gray-400 border border-gray-700"
+            }`}
+            onClick={() => setHoldersOnly(false)}
+            type="button"
+          >
+            Newest
+          </button>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={holdersOnly}
+              onChange={(e) => setHoldersOnly(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500"
+            />
+            <span className="text-gray-300 lg:text-slate-700">Holders</span>
+          </label>
+        </div>
+
+        {error && <div className="text-red-400 text-sm">{error}</div>}
         {loading && comments.length === 0 ? (
           renderSkeletons()
         ) : filteredComments.length === 0 ? (
-          <div className="text-slate-700">{t("noComments")}</div>
+          <div className="text-gray-400 lg:text-slate-700">{t("noComments")}</div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {filteredComments.map((comment) => (
               <CommentItem
                 key={comment.id}
@@ -304,7 +298,7 @@ function CommentItem({
     : []
 
   return (
-    <div className="group relative p-4 rounded-xl transition-colors bg-white border border-[#e6ddcb]">
+    <div className="group relative p-4 rounded-none lg:rounded-xl transition-colors bg-[#3a5f4a] lg:bg-white border-0 lg:border lg:border-[#e6ddcb]">
       <div className="flex gap-3">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm flex-shrink-0 overflow-hidden">
           {avatarUrl ? (
@@ -323,11 +317,11 @@ function CommentItem({
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-slate-900 font-medium">{comment.user?.display_name || "User"}</span>
+            <span className="text-white lg:text-slate-900 font-medium">{comment.user?.display_name || "User"}</span>
             {primaryHolding && (
               <div className="relative">
                 <button
-                  className="text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full flex items-center gap-1 shadow-sm border border-emerald-200"
+                  className="text-xs bg-emerald-900 lg:bg-emerald-100 text-emerald-300 lg:text-emerald-800 px-2 py-1 rounded-full flex items-center gap-1 shadow-sm border border-emerald-800 lg:border-emerald-200"
                   onClick={() => setShowHoldings((prev) => !prev)}
                 >
                   <span>
@@ -336,38 +330,38 @@ function CommentItem({
                   {hasMultipleHoldings && (showHoldings ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                 </button>
                 {hasMultipleHoldings && showHoldings && (
-                  <div className="absolute z-10 mt-2 w-64 rounded-lg shadow-lg p-3 space-y-2 border border-[#e6ddcb] bg-white">
+                  <div className="absolute z-10 mt-2 w-64 rounded-lg shadow-lg p-3 space-y-2 border border-gray-700 lg:border-[#e6ddcb] bg-[#3a5f4a] lg:bg-white">
                     {comment.holdings.map((h, idx) => (
-                      <div key={`${h.option_id}-${idx}`} className="text-xs text-slate-900 flex justify-between">
-                        <span className="text-slate-800">{h.option_title || "Position"}</span>
-                        <span className="text-slate-900 font-semibold">{formatAmount(h.cost_basis)}</span>
+                      <div key={`${h.option_id}-${idx}`} className="text-xs text-white lg:text-slate-900 flex justify-between">
+                        <span className="text-gray-300 lg:text-slate-800">{h.option_title || "Position"}</span>
+                        <span className="text-white lg:text-slate-900 font-semibold">{formatAmount(h.cost_basis)}</span>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
             )}
-            <span className="text-slate-600 text-xs">• {formatTimeAgo(comment.created_at)}</span>
+            <span className="text-gray-400 lg:text-slate-600 text-xs">• {formatTimeAgo(comment.created_at)}</span>
           </div>
-          <p className="text-slate-900 mt-2 leading-relaxed">
-            {parentUserName ? <span className="text-[#3f5e9c] mr-2">@{parentUserName}</span> : null}
+          <p className="text-gray-200 lg:text-slate-900 mt-2 leading-relaxed">
+            {parentUserName ? <span className="text-blue-400 lg:text-[#3f5e9c] mr-2">@{parentUserName}</span> : null}
             {comment.content}
           </p>
-          <div className="flex items-center gap-2 mt-3 text-slate-700">
+          <div className="flex items-center gap-2 mt-3 text-gray-400 lg:text-slate-700">
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 gap-1 text-slate-700 hover:text-slate-900"
+              className="h-8 gap-1 text-gray-400 lg:text-slate-700 hover:text-white lg:hover:text-slate-900"
               type="button"
             >
               <Heart className="w-4 h-4" />
-              <span>Like</span>
+              <span>0</span>
             </Button>
             {user && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1 text-slate-700 hover:text-slate-900"
+                className="h-8 gap-1 text-gray-400 lg:text-slate-700 hover:text-white lg:hover:text-slate-900"
                 onClick={() => {
                   setReplyTarget(draftKey)
                   updateDraft(draftKey, replyDraft || "")
@@ -387,7 +381,7 @@ function CommentItem({
                 value={replyDraft}
                 onChange={(e) => updateDraft(draftKey, e.target.value)}
                 placeholder="Reply to this comment..."
-                className="bg-white text-slate-900 placeholder:text-slate-500 border border-[#e6ddcb] rounded-xl focus-visible:ring-[#4b6ea9]/60"
+                className="bg-[#3a5f4a] lg:bg-white text-white lg:text-slate-900 placeholder:text-gray-400 lg:placeholder:text-slate-500 border-0 lg:border lg:border-[#e6ddcb] rounded-xl focus-visible:ring-blue-500 lg:focus-visible:ring-[#4b6ea9]/60"
               />
               <div className="flex justify-end">
                 <Button

@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react"
 import Navigation from "@/components/Navigation"
+import MobileBottomNav from "@/components/MobileBottomNav"
 import MarketCard from "@/components/MarketCard"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -140,6 +141,7 @@ export default function WatchlistPage() {
           </div>
         )}
       </div>
+      <MobileBottomNav />
     </div>
   )
 }

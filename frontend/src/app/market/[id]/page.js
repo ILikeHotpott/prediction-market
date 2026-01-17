@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState, useRef, useCallback } from "react"
 import Navigation from "@/components/Navigation"
+import MobileBottomNav from "@/components/MobileBottomNav"
 import MarketChart from "@/components/MarketChart"
 import Comments from "@/components/Comments"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -10,6 +11,7 @@ import { useAuth } from "@/components/auth/AuthProvider"
 import { usePortfolio } from "@/components/PortfolioProvider"
 import { useParams } from "next/navigation"
 import { useLanguage } from "@/components/LanguageProvider"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -37,6 +39,8 @@ export default function MarketDetail({ params }) {
   const [positionsMap, setPositionsMap] = useState({})
   const [chartRefreshTrigger, setChartRefreshTrigger] = useState(0)
   const [chartInterval, setChartInterval] = useState("1H")
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
 
   const marketsSorted = useMemo(() => {
     return (eventData?.markets || [])
@@ -401,7 +405,10 @@ export default function MarketDetail({ params }) {
       setSuccess(successMsg)
       setToastMessage(successMsg)
       setToastType("success")
-      
+
+      // Close mobile sheet on success
+      setMobileSheetOpen(false)
+
       // Update balance
       setBalance({
         token: data.token,
@@ -521,6 +528,29 @@ export default function MarketDetail({ params }) {
     }
   }, [])
 
+  // Handle scroll for mobile header shrink
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.innerWidth < 1024) {
+        setScrolled(window.scrollY > 50)
+      }
+    }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  const openMobileSheet = (action) => {
+    setOutcomeAction(action)
+    if (action === "yes") {
+      const target = yesOption || optionsSorted[0]
+      if (target) setSelectedOptionId(normalizeId(target.id))
+    } else {
+      const target = noOption || optionsSorted[1] || optionsSorted[0]
+      if (target) setSelectedOptionId(normalizeId(target.id))
+    }
+    setMobileSheetOpen(true)
+  }
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden lg:overflow-hidden" onWheel={handleWheel}>
       <Suspense fallback={<div className="h-20" />}>
@@ -536,82 +566,100 @@ export default function MarketDetail({ params }) {
         }}
       />
       <div className="flex-1 overflow-y-auto lg:overflow-hidden">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 h-full">
+        <div className="max-w-[1400px] mx-auto lg:px-12 h-full">
         {loading && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Chart Area Skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-4">
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
                 <Skeleton className="h-6 w-2/3 mb-4" />
                 <Skeleton className="h-10 w-32 mb-4" />
                 <Skeleton className="h-[280px] w-full rounded-lg" />
-                <div className="flex gap-2 mt-4">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-8 w-12 rounded" />
-                  ))}
-                </div>
-              </div>
-              <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
-                <Skeleton className="h-6 w-32 mb-4" />
-                <Skeleton className="h-20 w-full" />
               </div>
             </div>
-            {/* Sidebar Skeleton */}
             <div className="space-y-6">
               <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <Skeleton className="w-14 h-14 rounded-2xl" />
-                  <div className="flex-1">
-                    <Skeleton className="h-5 w-3/4 mb-2" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                </div>
-                <Skeleton className="h-10 w-full mb-4" />
-                <div className="grid grid-cols-2 gap-3 mb-6">
-                  <Skeleton className="h-16 rounded-xl" />
-                  <Skeleton className="h-16 rounded-xl" />
-                </div>
-                <Skeleton className="h-6 w-24 mb-3" />
-                <Skeleton className="h-16 w-full rounded-xl mb-3" />
-                <div className="grid grid-cols-4 gap-3 mb-6">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="h-12 rounded-lg" />
-                  ))}
-                </div>
                 <Skeleton className="h-14 w-full rounded-xl" />
               </div>
             </div>
           </div>
         )}
-        {!loading && error && <div className="text-red-400 mb-4">{error}</div>}
+        {!loading && error && <div className="text-red-400 mb-4 px-4">{error}</div>}
         {!loading && eventData && selectedMarket && (
-          <div className="flex flex-col lg:flex-row gap-6 h-full">
-            {/* Main Chart Area - scrollable on desktop */}
-            <div ref={leftScrollRef} className="lg:w-2/3 space-y-6 lg:overflow-y-auto lg:h-full lg:pr-4 lg:pb-12">
-              <MarketChart
-                market={selectedMarket}
-                eventId={eventData?.id}
-                eventTitle={eventData?.title}
-                coverUrl={eventData?.cover_url || selectedMarket?.cover_url}
-                eventType={eventData?.group_rule || "standalone"}
-                markets={marketsSorted}
-                hideOutcomes={hideOutcomes}
-                onSelectOutcome={selectOption}
-                onSelectMarket={selectMarket}
-                selectedOptionId={selectedMarketId}
-                selectedAction={outcomeAction}
-                refreshTrigger={chartRefreshTrigger}
-                interval={chartInterval}
-                onIntervalChange={setChartInterval}
-              />
+          <>
+            {/* Mobile Layout */}
+            <div className="lg:hidden bg-[#446f55]">
+              {/* Mobile Chart */}
+              <div>
+                <MarketChart
+                  market={selectedMarket}
+                  eventId={eventData?.id}
+                  eventTitle={eventData?.title}
+                  coverUrl={eventData?.cover_url || selectedMarket?.cover_url}
+                  eventType={eventData?.group_rule || "standalone"}
+                  markets={marketsSorted}
+                  hideOutcomes={isStandaloneEvent}
+                  onSelectOutcome={selectOption}
+                  onSelectMarket={(m, action) => {
+                    selectMarket(m, action)
+                    setMobileSheetOpen(true)
+                  }}
+                  selectedOptionId={selectedMarketId}
+                  selectedAction={outcomeAction}
+                  refreshTrigger={chartRefreshTrigger}
+                  interval={chartInterval}
+                  onIntervalChange={setChartInterval}
+                  scrolled={scrolled}
+                />
+              </div>
 
-              <Comments marketId={selectedMarket?.id} user={user} openAuthModal={openAuthModal} />
+              {/* Mobile Comments */}
+              <div className="pb-32">
+                <Comments marketId={selectedMarket?.id} user={user} openAuthModal={openAuthModal} />
+              </div>
+
+              {/* Fixed Bottom Buttons for Standalone Markets */}
+              {isStandaloneEvent && (
+                <div className="fixed bottom-16 left-0 right-0 bg-[#446f55] p-3 flex gap-2 z-30 border-t border-white/10">
+                  <button
+                    onClick={() => openMobileSheet("yes")}
+                    className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-base transition-colors rounded-lg"
+                  >
+                    Buy Yes {displayYesPrice}
+                  </button>
+                  <button
+                    onClick={() => openMobileSheet("no")}
+                    className="flex-1 py-4 bg-[#B11E1B] hover:bg-[#9a1916] text-white font-semibold text-base transition-colors rounded-lg"
+                  >
+                    Buy No {displayNoPrice}
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Sidebar - fixed on desktop */}
-            <div className="lg:w-1/3 space-y-6 lg:overflow-y-auto lg:h-full">
-              {/* Trade Panel */}
-              <div className="bg-[#f9f6ee] text-slate-900 rounded-2xl border border-[#e6ddcb] shadow-md p-4">
+            {/* Desktop Layout */}
+            <div className="hidden lg:flex flex-col lg:flex-row gap-6 h-full">
+              <div ref={leftScrollRef} className="lg:w-2/3 space-y-6 lg:overflow-y-auto lg:h-full lg:pr-4 lg:pb-12">
+                <MarketChart
+                  market={selectedMarket}
+                  eventId={eventData?.id}
+                  eventTitle={eventData?.title}
+                  coverUrl={eventData?.cover_url || selectedMarket?.cover_url}
+                  eventType={eventData?.group_rule || "standalone"}
+                  markets={marketsSorted}
+                  hideOutcomes={hideOutcomes}
+                  onSelectOutcome={selectOption}
+                  onSelectMarket={selectMarket}
+                  selectedOptionId={selectedMarketId}
+                  selectedAction={outcomeAction}
+                  refreshTrigger={chartRefreshTrigger}
+                  interval={chartInterval}
+                  onIntervalChange={setChartInterval}
+                />
+                <Comments marketId={selectedMarket?.id} user={user} openAuthModal={openAuthModal} />
+              </div>
+
+              <div className="lg:w-1/3 space-y-6 lg:overflow-y-auto lg:h-full lg:mt-6">
+                <div className="bg-[#f9f6ee] text-slate-900 rounded-2xl border border-[#e6ddcb] shadow-md p-4">
                 {!isStandaloneEvent && (
                   <div className="mb-3">
                     <h3 className="text-slate-900 text-lg font-semibold leading-tight truncate">
@@ -834,9 +882,152 @@ export default function MarketDetail({ params }) {
               </div>
             </div>
           </div>
+          </>
         )}
         </div>
       </div>
+
+      {/* Mobile Bottom Sheet for Order Placement */}
+      <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
+        <SheetContent onClose={() => setMobileSheetOpen(false)}>
+          <div className="px-6 pb-6">
+            {/* Buy/Sell Toggle */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setSide("buy")}
+                className={`flex-1 py-2 rounded-lg font-semibold transition-colors ${
+                  side === "buy" ? "bg-emerald-600 text-white" : "bg-[#2d4a3a] text-gray-300"
+                }`}
+              >
+                Buy
+              </button>
+              <button
+                onClick={() => setSide("sell")}
+                className={`flex-1 py-2 rounded-lg font-semibold transition-colors ${
+                  side === "sell" ? "bg-[#B11E1B] text-white" : "bg-[#2d4a3a] text-gray-300"
+                }`}
+              >
+                Sell
+              </button>
+            </div>
+
+            {/* Market Info */}
+            <div className="flex items-center gap-3 mb-6">
+              {eventData?.cover_url && (
+                <img src={eventData.cover_url} alt="" className="w-12 h-12 rounded-lg object-cover" />
+              )}
+              <div className="flex-1">
+                <div className="text-white font-semibold text-sm line-clamp-2">
+                  {eventData?.title || selectedMarket?.title}
+                </div>
+                {!isStandaloneEvent && selectedMarket?.bucket_label && (
+                  <div className="text-gray-400 text-xs mt-1">{selectedMarket.bucket_label}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Option Selection */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 text-sm mb-2">
+                <span className="text-gray-400">Outcome</span>
+                <span className={`font-semibold ${outcomeAction === "yes" ? "text-emerald-400" : "text-red-400"}`}>
+                  {outcomeAction === "yes" ? "Yes" : "No"}
+                </span>
+              </div>
+              <div className="text-gray-400 text-xs">
+                Bal. ${balance?.available_amount ? Number(balance.available_amount).toFixed(2) : "0.00"}
+              </div>
+            </div>
+
+            {/* Amount Input */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <button className="text-gray-400 text-3xl font-light" onClick={() => handleAmountPreset(-1)}>−</button>
+                <div className="text-center flex-1">
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => {
+                      if (success || error) {
+                        setSuccess("")
+                        setError("")
+                      }
+                      let val = e.target.value
+                      if (val === "") {
+                        setAmount("")
+                        return
+                      }
+                      val = val.replace(/[^\d.]/g, "")
+                      if (val.startsWith(".")) {
+                        val = `0${val}`
+                      }
+                      const [i, d] = val.split(".")
+                      const limited = d != null ? `${i}.${d.slice(0, 2)}` : i
+                      setAmount(limited)
+                    }}
+                    className="w-full text-5xl font-semibold text-white bg-transparent text-center focus:outline-none"
+                    placeholder="0"
+                  />
+                </div>
+                <button className="text-gray-400 text-3xl font-light" onClick={() => handleAmountPreset(1)}>
+                  +
+                </button>
+              </div>
+
+              {/* Quick Amount Buttons */}
+              <div className="grid grid-cols-4 gap-2 mb-6">
+                <button
+                  onClick={() => handleAmountPreset(1)}
+                  className="py-3 bg-[#2d4a3a] hover:bg-[#3a5f4a] text-white rounded-lg font-semibold transition-colors"
+                >
+                  +$1
+                </button>
+                <button
+                  onClick={() => handleAmountPreset(20)}
+                  className="py-3 bg-[#2d4a3a] hover:bg-[#3a5f4a] text-white rounded-lg font-semibold transition-colors"
+                >
+                  +$20
+                </button>
+                <button
+                  onClick={() => handleAmountPreset(100)}
+                  className="py-3 bg-[#2d4a3a] hover:bg-[#3a5f4a] text-white rounded-lg font-semibold transition-colors"
+                >
+                  +$100
+                </button>
+                <button
+                  onClick={() =>
+                    balance?.available_amount &&
+                    setAmount(Math.max(Number(balance.available_amount), 0).toFixed(2))
+                  }
+                  className="py-3 bg-[#2d4a3a] hover:bg-[#3a5f4a] text-white rounded-lg font-semibold transition-colors"
+                >
+                  Max
+                </button>
+              </div>
+            </div>
+
+            {/* Place Order Button */}
+            <button
+              onClick={handlePlaceOrder}
+              disabled={placing}
+              className={`w-full py-4 disabled:bg-gray-600 text-white font-semibold rounded-xl text-lg transition-colors ${
+                outcomeAction === "yes" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-[#B11E1B] hover:bg-[#9a1916]"
+              }`}
+            >
+              {placing ? "Submitting..." : `Buy ${outcomeAction === "yes" ? "Yes" : "No"}`}
+            </button>
+
+            {/* Terms */}
+            <div className="text-center text-gray-300 text-xs mt-4">
+              By trading, you agree to the <span className="underline">Terms of Use</span>.
+            </div>
+
+            {error && <div className="text-red-400 mt-3 text-sm text-center">{error}</div>}
+            {success && <div className="text-emerald-400 mt-3 text-sm text-center">{success}</div>}
+          </div>
+        </SheetContent>
+      </Sheet>
+      <MobileBottomNav />
     </div>
   )
 }
