@@ -151,7 +151,6 @@ elif os.getenv("SUPABASE_DB_NAME"):
         },
         "CONN_MAX_AGE": 0,  # Disable persistent connections to prevent pool exhaustion
         "CONN_HEALTH_CHECKS": True,
-        # Required for Supabase Transaction mode (port 6543)
         "DISABLE_SERVER_SIDE_CURSORS": True,
     }
 

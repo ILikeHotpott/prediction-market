@@ -1,0 +1,172 @@
+commit bf85a4817c1363dec1379de38720c443dfb94aa0
+Author: Yitong Liu <liuyitong1210@163.com>
+Date:   Sun Jan 18 20:23:43 2026 +1030
+
+    FIX search
+
+diff --git a/backend/market/views/events.py b/backend/market/views/events.py
+index 9eb97df..a2a0d4a 100644
+--- a/backend/market/views/events.py
++++ b/backend/market/views/events.py
+@@ -399,20 +399,34 @@ def list_events(request):
+             return JsonResponse(cached, status=200)
+ 
+     # Use select_related for stats (OneToOne) instead of prefetch_related to avoid N+1
+-    options_qs = MarketOption.objects.select_related("stats").order_by("option_index")
++    # Only fetch minimal fields for list view
++    options_qs = (
++        MarketOption.objects.select_related("stats")
++        .only("id", "market_id", "title", "option_index", "stats__prob_bps")
++        .order_by("option_index")
++    )
+ 
+-    markets_qs = Market.objects.order_by("sort_weight", "-created_at").prefetch_related(
+-        Prefetch("options", queryset=options_qs, to_attr="prefetched_options")
++    markets_qs = (
++        Market.objects.only("id", "event_id", "title", "status")
++        .order_by("sort_weight", "-created_at")
++        .prefetch_related(Prefetch("options", queryset=options_qs, to_attr="prefetched_options"))
+     )
+     if not is_admin:
+         markets_qs = markets_qs.filter(status="active", is_hidden=False)
+ 
+-    # Always prefetch ALL translations for instant language switching
+-    translations_qs = EventTranslation.objects.all()
++    # Only fetch translations for requested language (not all languages)
++    if lang != "en":
++        translations_qs = EventTranslation.objects.filter(language=lang).only("event_id", "language", "title", "description")
++    else:
++        translations_qs = EventTranslation.objects.none()
+ 
+-    events_qs = Event.objects.order_by("-sort_weight", "-created_at").prefetch_related(
+-        Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
+-        Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations")
++    events_qs = (
++        Event.objects.only("id", "title", "status", "primary_market_id", "category", "sort_weight", "created_at")
++        .order_by("-sort_weight", "-created_at")
++        .prefetch_related(
++            Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
++            Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations"),
++        )
+     )
+     if not is_admin and not request.GET.get("all"):
+         events_qs = events_qs.filter(status="active", is_hidden=False)
+@@ -426,7 +440,7 @@ def list_events(request):
+         id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
+         events_qs = events_qs.filter(id__in=id_list)
+ 
+-    items = [serialize_event(e, lang, include_all_translations=True) for e in events_qs[:100]]
++    items = [serialize_event(e, lang, include_all_translations=False) for e in events_qs[:100]]
+     result = {"items": items}
+ 
+     # Cache the result (only for non-admin and English)
+diff --git a/backend/monofuture/settings.py b/backend/monofuture/settings.py
+index 835f73f..d5c2d0b 100644
+--- a/backend/monofuture/settings.py
++++ b/backend/monofuture/settings.py
+@@ -133,6 +133,7 @@ if supabase_db_url:
+         "PORT": db_port,
+         "OPTIONS": {"sslmode": os.getenv("SUPABASE_DB_SSLMODE", "require")},
+         "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
++        "CONN_HEALTH_CHECKS": True,
+         # Required for Supabase Transaction mode (port 6543)
+         "DISABLE_SERVER_SIDE_CURSORS": True,
+     }
+@@ -144,8 +145,12 @@ elif os.getenv("SUPABASE_DB_NAME"):
+         "PASSWORD": os.getenv("SUPABASE_DB_PASSWORD"),
+         "HOST": os.getenv("SUPABASE_DB_HOST"),
+         "PORT": os.getenv("SUPABASE_DB_PORT", "6543"),
+-        "OPTIONS": {"sslmode": os.getenv("SUPABASE_DB_SSLMODE", "require")},
+-        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
++        "OPTIONS": {
++            "sslmode": os.getenv("SUPABASE_DB_SSLMODE", "require"),
++            "connect_timeout": 5,
++        },
++        "CONN_MAX_AGE": 0,  # Disable persistent connections to prevent pool exhaustion
++        "CONN_HEALTH_CHECKS": True,
+         # Required for Supabase Transaction mode (port 6543)
+         "DISABLE_SERVER_SIDE_CURSORS": True,
+     }
+diff --git a/frontend/components/Logo.js b/frontend/components/Logo.js
+index 5affb9b..109fd62 100644
+--- a/frontend/components/Logo.js
++++ b/frontend/components/Logo.js
+@@ -152,7 +152,7 @@ export default function MonoFutureMarqueeLogo({
+           </filter>
+ 
+           <filter id={`${uid}_textShadow`} x="-30%" y="-30%" width="160%" height="160%">
+-            <feDropShadow dx="0" dy="6" stdDeviation="1.6" floodColor="#000000" floodOpacity="0.55" />
++            <feDropShadow dx="0" dy="4" stdDeviation="1" floodColor="#000000" floodOpacity="0.35" />
+           </filter>
+ 
+           <linearGradient id={`${uid}_gold`} x1="0" y1="0" x2="0" y2="1">
+@@ -186,6 +186,9 @@ export default function MonoFutureMarqueeLogo({
+               fontSize="132"
+               fontWeight="900"
+               fill="white"
++              stroke="white"
++              strokeWidth="4"
++              strokeLinejoin="round"
+               lengthAdjust="spacingAndGlyphs"
+               textLength={textMaxW}
+               style={{ fontFamily: bungee.style.fontFamily }}
+@@ -278,25 +281,7 @@ export default function MonoFutureMarqueeLogo({
+         })}
+ 
+         {/* 文字（Bungee） */}
+-        <g filter={`url(#${uid}_textShadow)`} clipPath={`url(#${uid}_innerClip)`}>
+-          <text
+-            x={W / 2}
+-            y={inner.y + inner.h / 2}
+-            textAnchor="middle"
+-            dominantBaseline="middle"
+-            fontSize="132"
+-            fontWeight="900"
+-            fill="none"
+-            stroke="#6B471C"
+-            strokeWidth="14"
+-            strokeLinejoin="round"
+-            lengthAdjust="spacingAndGlyphs"
+-            textLength={textMaxW}
+-            style={{ fontFamily: bungee.style.fontFamily }}
+-          >
+-            {text}
+-          </text>
+-
++        <g>
+           <text
+             x={W / 2}
+             y={inner.y + inner.h / 2}
+@@ -305,6 +290,10 @@ export default function MonoFutureMarqueeLogo({
+             fontSize="132"
+             fontWeight="900"
+             fill={`url(#${uid}_gold)`}
++            stroke="#D49A3E"
++            strokeWidth="2"
++            strokeLinejoin="round"
++            paintOrder="stroke fill"
+             lengthAdjust="spacingAndGlyphs"
+             textLength={textMaxW}
+             style={{ fontFamily: bungee.style.fontFamily }}
+diff --git a/frontend/components/SearchDropdown.js b/frontend/components/SearchDropdown.js
+index 1571882..8e8c1b1 100644
+--- a/frontend/components/SearchDropdown.js
++++ b/frontend/components/SearchDropdown.js
+@@ -61,7 +61,7 @@ export default function SearchDropdown({ className = "" }) {
+     if (!term.trim()) return;
+     saveRecent(term.trim());
+     setOpen(false);
+-    router.push(`/search?_q=${encodeURIComponent(term.trim())}`);
++    router.push(`/search?q=${encodeURIComponent(term.trim())}`);
+   };
+ 
+   const handleKeyDown = (e) => {
+@@ -74,7 +74,7 @@ export default function SearchDropdown({ className = "" }) {
+ 
+   const handleTagClick = (tag) => {
+     setOpen(false);
+-    router.push(`/search?_q=${encodeURIComponent(t(`tags.${tag}`))}`);
++    router.push(`/search?q=${encodeURIComponent(t(`tags.${tag}`))}`);
+   };
+ 
+   return (

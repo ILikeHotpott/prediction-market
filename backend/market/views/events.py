@@ -398,35 +398,21 @@ def list_events(request):
         if cached is not None:
             return JsonResponse(cached, status=200)
 
-    # Use select_related for stats (OneToOne) instead of prefetch_related to avoid N+1
-    # Only fetch minimal fields for list view
-    options_qs = (
-        MarketOption.objects.select_related("stats")
-        .only("id", "market_id", "title", "option_index", "stats__prob_bps")
-        .order_by("option_index")
-    )
+    options_qs = MarketOption.objects.select_related("stats").order_by("option_index")
 
-    markets_qs = (
-        Market.objects.only("id", "event_id", "title", "status")
-        .order_by("sort_weight", "-created_at")
-        .prefetch_related(Prefetch("options", queryset=options_qs, to_attr="prefetched_options"))
+
+    markets_qs = Market.objects.order_by("sort_weight", "-created_at").prefetch_related(
+        Prefetch("options", queryset=options_qs, to_attr="prefetched_options")
     )
     if not is_admin:
         markets_qs = markets_qs.filter(status="active", is_hidden=False)
 
-    # Only fetch translations for requested language (not all languages)
-    if lang != "en":
-        translations_qs = EventTranslation.objects.filter(language=lang).only("event_id", "language", "title", "description")
-    else:
-        translations_qs = EventTranslation.objects.none()
+    # Always prefetch ALL translations for instant language switching
+    translations_qs = EventTranslation.objects.all()
 
-    events_qs = (
-        Event.objects.only("id", "title", "status", "primary_market_id", "category", "sort_weight", "created_at")
-        .order_by("-sort_weight", "-created_at")
-        .prefetch_related(
-            Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
-            Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations"),
-        )
+    events_qs = Event.objects.order_by("-sort_weight", "-created_at").prefetch_related(
+        Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
+        Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations")
     )
     if not is_admin and not request.GET.get("all"):
         events_qs = events_qs.filter(status="active", is_hidden=False)
@@ -440,7 +426,7 @@ def list_events(request):
         id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
         events_qs = events_qs.filter(id__in=id_list)
 
-    items = [serialize_event(e, lang, include_all_translations=False) for e in events_qs[:100]]
+    items = [serialize_event(e, lang, include_all_translations=True) for e in events_qs[:100]]
     result = {"items": items}
 
     # Cache the result (only for non-admin and English)
