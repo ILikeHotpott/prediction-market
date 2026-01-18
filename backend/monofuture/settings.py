@@ -133,6 +133,7 @@ if supabase_db_url:
         "PORT": db_port,
         "OPTIONS": {"sslmode": os.getenv("SUPABASE_DB_SSLMODE", "require")},
         "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        "CONN_HEALTH_CHECKS": True,
         # Required for Supabase Transaction mode (port 6543)
         "DISABLE_SERVER_SIDE_CURSORS": True,
     }
@@ -144,8 +145,12 @@ elif os.getenv("SUPABASE_DB_NAME"):
         "PASSWORD": os.getenv("SUPABASE_DB_PASSWORD"),
         "HOST": os.getenv("SUPABASE_DB_HOST"),
         "PORT": os.getenv("SUPABASE_DB_PORT", "6543"),
-        "OPTIONS": {"sslmode": os.getenv("SUPABASE_DB_SSLMODE", "require")},
-        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        "OPTIONS": {
+            "sslmode": os.getenv("SUPABASE_DB_SSLMODE", "require"),
+            "connect_timeout": 5,
+        },
+        "CONN_MAX_AGE": 0,  # Disable persistent connections to prevent pool exhaustion
+        "CONN_HEALTH_CHECKS": True,
         # Required for Supabase Transaction mode (port 6543)
         "DISABLE_SERVER_SIDE_CURSORS": True,
     }

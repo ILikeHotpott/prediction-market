@@ -152,7 +152,7 @@ export default function MonoFutureMarqueeLogo({
           </filter>
 
           <filter id={`${uid}_textShadow`} x="-30%" y="-30%" width="160%" height="160%">
-            <feDropShadow dx="0" dy="6" stdDeviation="1.6" floodColor="#000000" floodOpacity="0.55" />
+            <feDropShadow dx="0" dy="4" stdDeviation="1" floodColor="#000000" floodOpacity="0.35" />
           </filter>
 
           <linearGradient id={`${uid}_gold`} x1="0" y1="0" x2="0" y2="1">
@@ -186,6 +186,9 @@ export default function MonoFutureMarqueeLogo({
               fontSize="132"
               fontWeight="900"
               fill="white"
+              stroke="white"
+              strokeWidth="4"
+              strokeLinejoin="round"
               lengthAdjust="spacingAndGlyphs"
               textLength={textMaxW}
               style={{ fontFamily: bungee.style.fontFamily }}
@@ -278,25 +281,7 @@ export default function MonoFutureMarqueeLogo({
         })}
 
         {/* 文字（Bungee） */}
-        <g filter={`url(#${uid}_textShadow)`} clipPath={`url(#${uid}_innerClip)`}>
-          <text
-            x={W / 2}
-            y={inner.y + inner.h / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize="132"
-            fontWeight="900"
-            fill="none"
-            stroke="#6B471C"
-            strokeWidth="14"
-            strokeLinejoin="round"
-            lengthAdjust="spacingAndGlyphs"
-            textLength={textMaxW}
-            style={{ fontFamily: bungee.style.fontFamily }}
-          >
-            {text}
-          </text>
-
+        <g>
           <text
             x={W / 2}
             y={inner.y + inner.h / 2}
@@ -305,6 +290,10 @@ export default function MonoFutureMarqueeLogo({
             fontSize="132"
             fontWeight="900"
             fill={`url(#${uid}_gold)`}
+            stroke="#D49A3E"
+            strokeWidth="2"
+            strokeLinejoin="round"
+            paintOrder="stroke fill"
             lengthAdjust="spacingAndGlyphs"
             textLength={textMaxW}
             style={{ fontFamily: bungee.style.fontFamily }}

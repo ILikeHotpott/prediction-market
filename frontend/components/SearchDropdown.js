@@ -61,7 +61,7 @@ export default function SearchDropdown({ className = "" }) {
     if (!term.trim()) return;
     saveRecent(term.trim());
     setOpen(false);
-    router.push(`/search?_q=${encodeURIComponent(term.trim())}`);
+    router.push(`/search?q=${encodeURIComponent(term.trim())}`);
   };
 
   const handleKeyDown = (e) => {
@@ -74,7 +74,7 @@ export default function SearchDropdown({ className = "" }) {
 
   const handleTagClick = (tag) => {
     setOpen(false);
-    router.push(`/search?_q=${encodeURIComponent(t(`tags.${tag}`))}`);
+    router.push(`/search?q=${encodeURIComponent(t(`tags.${tag}`))}`);
   };
 
   return (
