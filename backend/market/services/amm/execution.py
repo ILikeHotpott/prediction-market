@@ -94,12 +94,17 @@ def _lock_pool_state(market_id: str) -> Tuple[AmmPool, List[AmmPoolOptionState],
     if pool.b is None or Decimal(pool.b) <= 0:
         raise ExecutionError("AMM pool liquidity parameter b is invalid", code="POOL_INVALID", http_status=422)
 
-    states = list(
+    state_qs = (
         AmmPoolOptionState.objects.select_for_update()
         .select_related("option")
         .filter(pool=pool)
-        .order_by("option__option_index", "option_id")
     )
+    if is_exclusive:
+        # Drop resolved/canceled markets so remaining outcomes renormalize correctly.
+        state_qs = state_qs.select_related("option__market").exclude(
+            option__market__status__in=["resolved", "canceled"]
+        )
+    states = list(state_qs.order_by("option__option_index", "option_id"))
     if not states:
         raise ExecutionError("AMM pool has no option state", code="POOL_STATE_NOT_FOUND", http_status=404)
 
@@ -155,6 +160,13 @@ def _lock_market_and_option(market_id: str, option_id: Optional[str], option_ind
         market = Market.objects.select_for_update().get(pk=market_id)
     except Market.DoesNotExist:
         raise ExecutionError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
+
+    if market.status in ("resolved", "canceled"):
+        raise ExecutionError(
+            "Market is no longer accepting orders",
+            code="MARKET_CLOSED",
+            http_status=400,
+        )
 
     if market.status != "active" or market.is_hidden:
         raise ExecutionError("Market is not active", code="MARKET_NOT_ACTIVE", http_status=400)
@@ -552,13 +564,10 @@ def execute_buy(
                     http_status=400,
                 )
 
-        # Apply balance and position - FIX: use F() for atomic balance update
-        BalanceSnapshot.objects.filter(pk=balance.pk).update(
-            available_amount=F("available_amount") - amt,
-            updated_at=now,
-        )
-        # Refresh balance for return value
-        balance.refresh_from_db()
+        # Apply balance and position (row is locked, so a single update is safe)
+        balance.available_amount = Decimal(balance.available_amount) - amt
+        balance.updated_at = now
+        balance.save(update_fields=["available_amount", "updated_at"])
 
         position.shares = Decimal(position.shares) + shares_out
         position.cost_basis = Decimal(position.cost_basis) + amt
@@ -638,6 +647,7 @@ def execute_buy(
             "market_id": str(market.id),
             "option_id": option.id,
             "option_index": option.option_index,
+            "chain": market.chain or DEFAULT_CHAIN,
             "amount_in": str(amt),
             "shares_out": str(shares_out),
             "fee_amount": quote.get("fee_amount"),
@@ -829,13 +839,10 @@ def execute_sell(
         # Update probabilities (cache)
         _recompute_option_probs(option_states, pool_state.b, now, is_exclusive=pool_state.is_exclusive)
 
-        # Balance credit - FIX: use F() for atomic balance update
-        BalanceSnapshot.objects.filter(pk=balance.pk).update(
-            available_amount=F("available_amount") + amount_out,
-            updated_at=now,
-        )
-        # Refresh balance for return value
-        balance.refresh_from_db()
+        # Balance credit (row is locked, so a single update is safe)
+        balance.available_amount = Decimal(balance.available_amount) + amount_out
+        balance.updated_at = now
+        balance.save(update_fields=["available_amount", "updated_at"])
 
         wallet = _ensure_wallet(user, wallet_id, now)
 
@@ -887,6 +894,7 @@ def execute_sell(
             "market_id": str(market.id),
             "option_id": option.id,
             "option_index": option.option_index,
+            "chain": market.chain or DEFAULT_CHAIN,
             "amount_out": str(amount_out),
             "shares_sold": str(shares_to_sell),
             "fee_amount": quote.get("fee_amount"),

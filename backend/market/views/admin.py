@@ -20,6 +20,7 @@ from ..models.users import UserRole
 from ..services.amm.settlement import (
     SettlementError,
     resolve_and_settle_market,
+    resolve_and_settle_market_partial,
     resolve_market,
     settle_market,
 )
@@ -72,7 +73,8 @@ def admin_resolve_market(request, market_id: str) -> JsonResponse:
     Request body:
     {
         "winning_option_id": "123",  // or
-        "winning_option_index": 0
+        "winning_option_index": 0,
+        "partial": false
     }
 
     Response:
@@ -210,13 +212,23 @@ def admin_resolve_and_settle_market(request, market_id: str) -> JsonResponse:
             status=400,
         )
 
+    partial = bool(data.get("partial"))
+
     try:
-        result = resolve_and_settle_market(
-            market_id=market_id,
-            winning_option_id=str(winning_option_id) if winning_option_id else None,
-            winning_option_index=int(winning_option_index) if winning_option_index is not None else None,
-            settled_by_user_id=str(admin_user.id),
-        )
+        if partial:
+            result = resolve_and_settle_market_partial(
+                market_id=market_id,
+                winning_option_id=str(winning_option_id) if winning_option_id else None,
+                winning_option_index=int(winning_option_index) if winning_option_index is not None else None,
+                settled_by_user_id=str(admin_user.id),
+            )
+        else:
+            result = resolve_and_settle_market(
+                market_id=market_id,
+                winning_option_id=str(winning_option_id) if winning_option_id else None,
+                winning_option_index=int(winning_option_index) if winning_option_index is not None else None,
+                settled_by_user_id=str(admin_user.id),
+            )
         return JsonResponse(result)
     except SettlementError as e:
         return _json_error(str(e), e.code, status=e.http_status)

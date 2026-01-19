@@ -266,7 +266,7 @@ def _batch_load_pool_states(positions):
     # 查询 1: 批量获取所有 pools + option states（使用 prefetch）
     all_pools = list(
         AmmPool.objects.filter(Q(market_id__in=market_ids) | Q(event_id__in=event_ids))
-        .prefetch_related('option_states__option')
+        .prefetch_related("option_states__option__market")
     )
 
     market_pools = {str(p.market_id): p for p in all_pools if p.market_id}
@@ -290,6 +290,14 @@ def _batch_load_pool_states(positions):
     for pool in all_pools:
         pid = str(pool.id)
         states = list(pool.option_states.all())
+        if pool.event_id:
+            eid = str(pool.event_id)
+            rule = (event_group_rules.get(eid, "") or "").strip().lower()
+            if rule == "exclusive":
+                states = [
+                    s for s in states
+                    if s.option.market and s.option.market.status not in ("resolved", "canceled")
+                ]
         states.sort(key=lambda s: (s.option.option_index, s.option_id))
         pool_option_states[pid] = states
 
@@ -917,4 +925,3 @@ def complete_onboarding(request):
         "bonus_token": ONBOARDING_BONUS_TOKEN,
         "new_balance": str(balance.available_amount),
     }, status=200)
-

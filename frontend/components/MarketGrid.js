@@ -71,6 +71,7 @@ async function fetchEventsData(category, lang = "en") {
   const url = new URL(`${backendBase}/api/events/`)
   if (category) url.searchParams.set("category", category)
   if (lang && lang !== "en") url.searchParams.set("lang", lang)
+  url.searchParams.set("include_translations", "0")
   try {
     const res = await fetch(url.toString(), { cache: "no-store" })
     const data = await res.json()
@@ -85,12 +86,13 @@ function normalizeEvents(items) {
   return items.map((evt) => {
     const groupRule = evt.group_rule || "standalone"
     const markets = evt.markets || []
+    const activeMarkets = markets.filter((m) => !["resolved", "canceled"].includes(m.status))
     const primaryMarket = evt.primary_market || markets.find((m) => String(m.id) === String(evt.primary_market_id)) || markets[0]
     const standaloneOutcomes = (primaryMarket?.options || []).map((o) => ({
       name: o.title,
       probability: o.probability ?? (o.probability_bps != null ? Math.round(o.probability_bps / 100) : 0),
     }))
-    const exclusiveOutcomes = markets.map((m, idx) => {
+    const exclusiveOutcomes = activeMarkets.map((m, idx) => {
       const yesOption = (m.options || []).find((o) => String(o.title || "").trim().toLowerCase() === "yes")
       const prob = yesOption?.probability ?? (yesOption?.probability_bps != null ? Math.round(yesOption.probability_bps / 100) : 0)
       return { name: m.title || m.assertion_text || `Option ${idx + 1}`, probability: prob, market_id: m.id }

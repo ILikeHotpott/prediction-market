@@ -86,6 +86,7 @@ export default function MarketChartRecharts({
   eventTitle,
   coverUrl,
   eventType = "standalone",
+  eventStatus,
   markets = [],
   hideOutcomes = false,
   onSelectMarket,
@@ -99,16 +100,27 @@ export default function MarketChartRecharts({
   const [loading, setLoading] = useState(true)
 
   const isMulti = eventType === "exclusive" || eventType === "independent"
+  const visibleMarkets = useMemo(() => {
+    if (!isMulti) return markets
+    const status = String(eventStatus || "").toLowerCase()
+    const hideResolved = status !== "resolved"
+    return markets.filter((m) => {
+      const marketStatus = String(m.status || "").toLowerCase()
+      if (marketStatus === "canceled") return false
+      if (hideResolved && marketStatus === "resolved") return false
+      return true
+    })
+  }, [isMulti, markets, eventStatus])
 
   // Memoize sorted markets to avoid re-sorting on every render
   const sortedMarkets = useMemo(() => {
-    if (!isMulti || !markets.length) return []
-    return [...markets].sort((a, b) => {
+    if (!isMulti || !visibleMarkets.length) return []
+    return [...visibleMarkets].sort((a, b) => {
       const aP = a.options?.find(o => o.side === "yes")?.probability_bps || 0
       const bP = b.options?.find(o => o.side === "yes")?.probability_bps || 0
       return bP - aP
     })
-  }, [isMulti, markets])
+  }, [isMulti, visibleMarkets])
 
   const marketIds = useMemo(() => {
     if (isMulti) {
@@ -160,7 +172,7 @@ export default function MarketChartRecharts({
           label: m.bucket_label || m.title,
           color: COLORS[i],
           optionId: opt?.id,
-          prob: opt?.probability_bps ? opt.probability_bps / 100 : null,
+          prob: opt?.probability_bps != null ? opt.probability_bps / 100 : null,
         }
       })
 
@@ -214,6 +226,21 @@ export default function MarketChartRecharts({
         }
       })
 
+      if (!Object.keys(points).length) {
+        const now = Date.now()
+        const fallbackPoints = {
+          [now - 60000]: { time: now - 60000 },
+          [now]: { time: now },
+        }
+        lines.forEach(line => {
+          if (line.prob != null) {
+            fallbackPoints[now - 60000][line.label] = line.prob
+            fallbackPoints[now][line.label] = line.prob
+          }
+        })
+        return { lines, points: Object.values(fallbackPoints) }
+      }
+
       return { lines, points: Object.values(points).sort((a, b) => a.time - b.time) }
     }
 
@@ -223,9 +250,14 @@ export default function MarketChartRecharts({
       time: new Date(p.bucket_start).getTime(),
       value: p.value_bps / 100
     }))
+    const prob = opt?.probability_bps != null ? opt.probability_bps / 100 : null
+    if (!points.length && prob != null) {
+      const now = Date.now()
+      points.push({ time: now - 60000, value: prob }, { time: now, value: prob })
+    }
 
     return {
-      lines: [{ id: market?.id, label: "Yes", color: COLORS[0], prob: opt?.probability_bps ? opt.probability_bps / 100 : null }],
+      lines: [{ id: market?.id, label: "Yes", color: COLORS[0], prob }],
       points
     }
   }, [allData, interval, market, sortedMarkets, isMulti])
@@ -258,7 +290,7 @@ export default function MarketChartRecharts({
       {isMulti && chartData.lines.length > 1 && (
         <div className="px-4 lg:px-6 pb-3 flex flex-wrap gap-4 text-sm">
           {chartData.lines.map(line => (
-            <button key={line.id} onClick={() => onSelectMarket?.(markets.find(m => m.id === line.id))} className="flex items-center gap-2 hover:opacity-80">
+            <button key={line.id} onClick={() => onSelectMarket?.(visibleMarkets.find(m => m.id === line.id))} className="flex items-center gap-2 hover:opacity-80">
               <span className="w-3 h-3 rounded-full" style={{ backgroundColor: line.color }} />
               <span className="text-gray-300 lg:text-slate-700">{line.label}</span>
               {line.prob != null && <span className="text-gray-500 lg:text-slate-500">({line.prob.toFixed(0)}%)</span>}
@@ -289,12 +321,12 @@ export default function MarketChartRecharts({
               formatter={(v, name) => [`${v.toFixed(1)}%`, name]}
               labelFormatter={(t) => new Date(t).toLocaleString()}
             />
-            {chartData.lines.length === 1 ? (
-              <Line type="monotone" dataKey="value" stroke={chartData.lines[0].color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
-            ) : (
+            {isMulti ? (
               chartData.lines.map(line => (
                 <Line key={line.id} type="monotone" dataKey={line.label} stroke={line.color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
               ))
+            ) : (
+              <Line type="monotone" dataKey="value" stroke={chartData.lines[0].color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
             )}
           </LineChart>
         </ResponsiveContainer>

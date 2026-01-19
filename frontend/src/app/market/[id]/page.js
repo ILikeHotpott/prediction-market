@@ -42,16 +42,39 @@ export default function MarketDetail({ params }) {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
+  const isMultiEvent = useMemo(() => {
+    const rule = (eventData?.group_rule || "").toLowerCase()
+    return rule === "exclusive" || rule === "independent"
+  }, [eventData])
+
+  const visibleMarkets = useMemo(() => {
+    const markets = eventData?.markets || []
+    if (!isMultiEvent) return markets
+    const eventStatus = String(eventData?.status || "").toLowerCase()
+    const hideResolved = eventStatus !== "resolved"
+    return markets.filter((m) => {
+      const marketStatus = String(m.status || "").toLowerCase()
+      if (marketStatus === "canceled") return false
+      if (hideResolved && marketStatus === "resolved") return false
+      return true
+    })
+  }, [eventData, isMultiEvent])
+
   const marketsSorted = useMemo(() => {
-    return (eventData?.markets || [])
+    return visibleMarkets
       .slice()
       .sort((a, b) => (a.sort_weight ?? 0) - (b.sort_weight ?? 0) || (a.created_at || "").localeCompare(b.created_at || ""))
-  }, [eventData])
+  }, [visibleMarkets])
 
   const selectedMarket = useMemo(() => {
     if (!eventData || !selectedMarketId) return null
-    return (eventData.markets || []).find((m) => normalizeId(m.id) === normalizeId(selectedMarketId)) || null
-  }, [eventData, selectedMarketId])
+    return visibleMarkets.find((m) => normalizeId(m.id) === normalizeId(selectedMarketId)) || null
+  }, [eventData, selectedMarketId, visibleMarkets])
+
+  useEffect(() => {
+    if (!eventData || selectedMarket || !visibleMarkets.length) return
+    setSelectedMarketId(normalizeId(visibleMarkets[0].id))
+  }, [eventData, selectedMarket, visibleMarkets])
 
   const optionsSorted = useMemo(() => {
     return (selectedMarket?.options || []).slice().sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))
@@ -127,16 +150,31 @@ export default function MarketDetail({ params }) {
     try {
       const url = new URL(`${backendBase}/api/events/${id}/`)
       if (locale && locale !== "en") url.searchParams.set("lang", locale)
+      url.searchParams.set("include_translations", "0")
       const res = await fetch(url.toString(), { cache: "no-store" })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to load event")
       setEventData(data)
-      const primaryMarketId = data.primary_market_id || data.primary_market?.id || data.markets?.[0]?.id
+      const eventMarkets = data.markets || []
+      const groupRule = (data.group_rule || "").toLowerCase()
+      const isMulti = groupRule === "exclusive" || groupRule === "independent"
+      const displayMarkets = isMulti
+        ? eventMarkets.filter((m) => !["resolved", "canceled"].includes(m.status))
+        : eventMarkets
+      const fallbackMarket = displayMarkets[0] || eventMarkets[0]
+      let primaryMarketId = data.primary_market_id || data.primary_market?.id || fallbackMarket?.id
+      if (isMulti && displayMarkets.length) {
+        const hasPrimary = displayMarkets.some((m) => normalizeId(m.id) === normalizeId(primaryMarketId))
+        if (!hasPrimary) {
+          primaryMarketId = displayMarkets[0]?.id
+        }
+      }
       if (preserveSelection) {
         const preferredMarket =
-          (data.markets || []).find((m) => normalizeId(m.id) === currentMarketId) ||
-          (data.markets || []).find((m) => normalizeId(m.id) === normalizeId(primaryMarketId)) ||
-          data.markets?.[0]
+          displayMarkets.find((m) => normalizeId(m.id) === currentMarketId) ||
+          displayMarkets.find((m) => normalizeId(m.id) === normalizeId(primaryMarketId)) ||
+          displayMarkets[0] ||
+          fallbackMarket
         const nextMarketId = normalizeId(preferredMarket?.id || primaryMarketId)
         setSelectedMarketId(nextMarketId)
         const sortedOptions = (preferredMarket?.options || [])
@@ -147,7 +185,9 @@ export default function MarketDetail({ params }) {
       } else {
         setSelectedMarketId(normalizeId(primaryMarketId))
         const firstMarket =
-          (data.markets || []).find((m) => normalizeId(m.id) === normalizeId(primaryMarketId)) || data.markets?.[0]
+          displayMarkets.find((m) => normalizeId(m.id) === normalizeId(primaryMarketId)) ||
+          displayMarkets[0] ||
+          fallbackMarket
         const firstOption =
           (firstMarket?.options || []).sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))[0]
         setSelectedOptionId(normalizeId(firstOption?.id))
@@ -584,6 +624,11 @@ export default function MarketDetail({ params }) {
           </div>
         )}
         {!loading && error && <div className="text-red-400 mb-4 px-4">{error}</div>}
+        {!loading && eventData && isMultiEvent && !visibleMarkets.length && (
+          <div className="px-4 py-10 text-slate-600">
+            All outcomes are settled for this event.
+          </div>
+        )}
         {!loading && eventData && selectedMarket && (
           <>
             {/* Mobile Layout */}
@@ -596,6 +641,7 @@ export default function MarketDetail({ params }) {
                   eventTitle={eventData?.title}
                   coverUrl={eventData?.cover_url || selectedMarket?.cover_url}
                   eventType={eventData?.group_rule || "standalone"}
+                  eventStatus={eventData?.status}
                   markets={marketsSorted}
                   hideOutcomes={isStandaloneEvent}
                   onSelectOutcome={selectOption}
@@ -645,6 +691,7 @@ export default function MarketDetail({ params }) {
                   eventTitle={eventData?.title}
                   coverUrl={eventData?.cover_url || selectedMarket?.cover_url}
                   eventType={eventData?.group_rule || "standalone"}
+                  eventStatus={eventData?.status}
                   markets={marketsSorted}
                   hideOutcomes={hideOutcomes}
                   onSelectOutcome={selectOption}

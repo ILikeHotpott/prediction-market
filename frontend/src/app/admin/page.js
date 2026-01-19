@@ -126,7 +126,7 @@ export default function AdminMarketsPage() {
   async function fetchEvents() {
     setError("");
     try {
-      const res = await fetch(`${backendBase}/api/events/?all=1`, {
+      const res = await fetch(`${backendBase}/api/events/?all=1&summary=1`, {
         cache: "no-store",
         headers: user ? { "X-User-Id": user.id } : {},
       });
@@ -332,7 +332,7 @@ export default function AdminMarketsPage() {
     setSuccess("");
     try {
       // Fetch full event data with markets and options
-      const res = await fetch(`${backendBase}/api/events/${eventId}/`, {
+      const res = await fetch(`${backendBase}/api/events/${eventId}/?include_translations=0`, {
         headers: user ? { "X-User-Id": user.id } : {},
       });
       const data = await res.json();
@@ -656,7 +656,7 @@ export default function AdminMarketsPage() {
                       </span>
                     </td>
                     <td className="p-2 text-foreground opacity-80">
-                      {(m.markets || []).length}
+                      {m.markets_count ?? (m.markets || []).length}
                     </td>
                     <td className="p-2 text-foreground opacity-80">
                       {m.trading_deadline
@@ -795,4 +795,3 @@ export default function AdminMarketsPage() {
     </div>
   );
 }
-

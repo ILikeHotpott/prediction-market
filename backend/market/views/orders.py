@@ -77,7 +77,7 @@ def _extract_target_prob_bps(result: dict, option_index: int) -> Optional[int]:
 
 def _build_buy_response(*, result: dict, market_id, token: str) -> dict:
     option_index = int(result.get("option_index") or 0)
-    chain = _get_chain(market_id)
+    chain = result.get("chain") or _get_chain(market_id)
 
     amount_in = _safe_decimal(result.get("amount_in"))
     shares_out = _safe_decimal(result.get("shares_out"))  # payout shares on win
@@ -138,7 +138,7 @@ def _build_buy_response(*, result: dict, market_id, token: str) -> dict:
 
 def _build_sell_response(*, result: dict, market_id, token: str) -> dict:
     option_index = int(result.get("option_index") or 0)
-    chain = _get_chain(market_id)
+    chain = result.get("chain") or _get_chain(market_id)
 
     amount_out = _safe_decimal(result.get("amount_out"))
     shares_sold = _safe_decimal(result.get("shares_sold"))
@@ -260,13 +260,6 @@ def place_buy_order(request, market_id):
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
 
-    # Check if market is resolved or canceled
-    market = Market.objects.filter(pk=market_id).first()
-    if not market:
-        return JsonResponse({"error": "Market not found"}, status=404)
-    if market.status in ("resolved", "canceled"):
-        return JsonResponse({"error": "Market is no longer accepting orders"}, status=400)
-
     payload = parse_json_body(request)
     if payload is None:
         return JsonResponse({"error": "Invalid JSON body"}, status=400)
@@ -283,13 +276,6 @@ def place_sell_order(request, market_id):
     user = get_user_from_request(request)
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
-
-    # Check if market is resolved or canceled
-    market = Market.objects.filter(pk=market_id).first()
-    if not market:
-        return JsonResponse({"error": "Market not found"}, status=404)
-    if market.status in ("resolved", "canceled"):
-        return JsonResponse({"error": "Market is no longer accepting orders"}, status=400)
 
     payload = parse_json_body(request)
     if payload is None:
@@ -310,13 +296,6 @@ def place_order(request, market_id):
     user = get_user_from_request(request)
     if not user:
         return JsonResponse({"error": "Unauthorized"}, status=401)
-
-    # Check if market is resolved or canceled
-    market = Market.objects.filter(pk=market_id).first()
-    if not market:
-        return JsonResponse({"error": "Market not found"}, status=404)
-    if market.status in ("resolved", "canceled"):
-        return JsonResponse({"error": "Market is no longer accepting orders"}, status=400)
 
     payload = parse_json_body(request)
     if payload is None:

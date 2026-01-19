@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Tuple, Optional
 
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Count
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -105,19 +105,33 @@ def _decode_payload(request):
         return None, JsonResponse({"error": "Invalid JSON body"}, status=400)
 
 
-def _prefetched_event(event_id):
+def _parse_bool_param(raw: Optional[str]) -> bool:
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _prefetched_event(event_id, *, lang: str = "en", include_translations: bool = False):
     # Use select_related for stats (OneToOne) instead of prefetch_related to avoid N+1
     options_qs = MarketOption.objects.select_related("stats").order_by("option_index")
     markets_qs = Market.objects.order_by("sort_weight", "-created_at").prefetch_related(
         Prefetch("options", queryset=options_qs, to_attr="prefetched_options")
     )
-    translations_qs = EventTranslation.objects.all()
-    return (
-        Event.objects.prefetch_related(
-            Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
+    translations_qs = None
+    if include_translations:
+        translations_qs = EventTranslation.objects.all()
+    elif lang != "en":
+        translations_qs = EventTranslation.objects.filter(language=lang)
+
+    prefetches = [
+        Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
+    ]
+    if translations_qs is not None:
+        prefetches.append(
             Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations")
         )
-        .get(pk=event_id)
+    return (
+        Event.objects.prefetch_related(*prefetches).get(pk=event_id)
     )
 
 
@@ -391,10 +405,35 @@ def list_events(request):
     category = request.GET.get("category")
     ids_param = request.GET.get("ids")
     lang = request.GET.get("lang", "en")
+    include_translations = _parse_bool_param(request.GET.get("include_translations"))
+    summary = _parse_bool_param(request.GET.get("summary"))
 
-    # Try cache first (skip for admin to always show fresh data, skip for non-en to avoid caching translated content)
-    if not is_admin and lang == "en":
-        cached = get_cached_event_list(category, is_admin, ids_param)
+    if summary:
+        events_qs = Event.objects.order_by("-sort_weight", "-created_at")
+        if not is_admin and not request.GET.get("all"):
+            events_qs = events_qs.filter(status="active", is_hidden=False)
+        if category:
+            events_qs = events_qs.filter(category__iexact=category)
+        if ids_param:
+            id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
+            events_qs = events_qs.filter(id__in=id_list)
+
+        events_qs = events_qs.annotate(markets_count=Count("markets"))
+        items = []
+        for event in events_qs[:100]:
+            items.append({
+                "id": str(event.id),
+                "title": event.title,
+                "status": event.status,
+                "slug": event.slug,
+                "trading_deadline": event.trading_deadline.isoformat() if event.trading_deadline else None,
+                "markets_count": event.markets_count,
+            })
+        return JsonResponse({"items": items}, status=200)
+
+    # Try cache first (skip for admin to always show fresh data)
+    if not is_admin:
+        cached = get_cached_event_list(category, is_admin, ids_param, lang, include_translations)
         if cached is not None:
             return JsonResponse(cached, status=200)
 
@@ -407,13 +446,19 @@ def list_events(request):
     if not is_admin:
         markets_qs = markets_qs.filter(status="active", is_hidden=False)
 
-    # Always prefetch ALL translations for instant language switching
-    translations_qs = EventTranslation.objects.all()
+    translations_qs = None
+    if include_translations:
+        translations_qs = EventTranslation.objects.all()
+    elif lang != "en":
+        translations_qs = EventTranslation.objects.filter(language=lang)
 
-    events_qs = Event.objects.order_by("-sort_weight", "-created_at").prefetch_related(
-        Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets"),
-        Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations")
-    )
+    prefetches = [Prefetch("markets", queryset=markets_qs, to_attr="prefetched_markets")]
+    if translations_qs is not None:
+        prefetches.append(
+            Prefetch("translations", queryset=translations_qs, to_attr="prefetched_translations")
+        )
+
+    events_qs = Event.objects.order_by("-sort_weight", "-created_at").prefetch_related(*prefetches)
     if not is_admin and not request.GET.get("all"):
         events_qs = events_qs.filter(status="active", is_hidden=False)
 
@@ -426,12 +471,15 @@ def list_events(request):
         id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
         events_qs = events_qs.filter(id__in=id_list)
 
-    items = [serialize_event(e, lang, include_all_translations=True) for e in events_qs[:100]]
+    items = [
+        serialize_event(e, lang, include_all_translations=include_translations)
+        for e in events_qs[:100]
+    ]
     result = {"items": items}
 
-    # Cache the result (only for non-admin and English)
-    if not is_admin and lang == "en":
-        set_cached_event_list(category, is_admin, result, ids_param)
+    # Cache the result (only for non-admin)
+    if not is_admin:
+        set_cached_event_list(category, is_admin, result, ids_param, lang, include_translations)
 
     return JsonResponse(result, status=200)
 
@@ -439,20 +487,19 @@ def list_events(request):
 @require_http_methods(["GET"])
 def get_event(request, event_id):
     lang = request.GET.get("lang", "en")
+    include_translations = _parse_bool_param(request.GET.get("include_translations"))
 
-    # Try cache first (only for English)
-    if lang == "en":
-        cached = get_cached_event_detail(str(event_id))
-        if cached is not None:
-            # Still need to check permissions for hidden events
-            if cached.get("status") != "active" or cached.get("is_hidden"):
-                user = get_user_from_request(request)
-                if not (user and user.role == "admin"):
-                    return JsonResponse({"error": "Event not available"}, status=404)
-            return JsonResponse(cached, status=200)
+    cached = get_cached_event_detail(str(event_id), lang, include_translations)
+    if cached is not None:
+        # Still need to check permissions for hidden events
+        if cached.get("status") != "active" or cached.get("is_hidden"):
+            user = get_user_from_request(request)
+            if not (user and user.role == "admin"):
+                return JsonResponse({"error": "Event not available"}, status=404)
+        return JsonResponse(cached, status=200)
 
     try:
-        event = _prefetched_event(event_id)
+        event = _prefetched_event(event_id, lang=lang, include_translations=include_translations)
     except Event.DoesNotExist:
         return JsonResponse({"error": "Event not found"}, status=404)
 
@@ -461,10 +508,9 @@ def get_event(request, event_id):
         if not (user and user.role == "admin"):
             return JsonResponse({"error": "Event not available"}, status=404)
 
-    result = serialize_event(event, lang, include_all_translations=True)
-    # Cache the result (only for English)
-    if lang == "en":
-        set_cached_event_detail(str(event_id), result)
+    result = serialize_event(event, lang, include_all_translations=include_translations)
+    # Cache the result
+    set_cached_event_detail(str(event_id), result, lang, include_translations)
     return JsonResponse(result, status=200)
 
 

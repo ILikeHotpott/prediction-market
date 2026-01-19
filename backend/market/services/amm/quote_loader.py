@@ -62,11 +62,12 @@ def load_pool_state(market_id, use_cache: bool = True) -> PoolState:
     if pool is None:
         raise QuoteNotFoundError("AMM pool not found for market")
 
-    states = list(
-        AmmPoolOptionState.objects.select_related("option")
-        .filter(pool=pool)
-        .order_by("option__option_index", "option_id")
-    )
+    state_qs = AmmPoolOptionState.objects.select_related("option").filter(pool=pool)
+    if is_exclusive:
+        state_qs = state_qs.select_related("option__market").exclude(
+            option__market__status__in=["resolved", "canceled"]
+        )
+    states = list(state_qs.order_by("option__option_index", "option_id"))
     if not states:
         raise QuoteNotFoundError("AMM pool option state not found")
 
@@ -111,5 +112,4 @@ def load_pool_state(market_id, use_cache: bool = True) -> PoolState:
         set_cached_pool_state(market_id_str, _pool_state_to_dict(state))
 
     return state
-
 

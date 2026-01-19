@@ -85,19 +85,45 @@ def set_cached_quote(market_id: str, option_id: str, side: str, amount: str, sha
 
 
 # Event List Cache
-def get_event_list_cache_key(category: Optional[str], is_admin: bool, ids: Optional[str] = None) -> str:
-    return make_key(PREFIX_EVENT_LIST, category or "all", "admin" if is_admin else "public", ids or "")
+def get_event_list_cache_key(
+    category: Optional[str],
+    is_admin: bool,
+    ids: Optional[str] = None,
+    lang: str = "en",
+    include_translations: bool = False,
+) -> str:
+    return make_key(
+        PREFIX_EVENT_LIST,
+        category or "all",
+        "admin" if is_admin else "public",
+        lang or "en",
+        "translations" if include_translations else "no_translations",
+        ids or "",
+    )
 
 
-def get_cached_event_list(category: Optional[str], is_admin: bool, ids: Optional[str] = None) -> Optional[dict]:
+def get_cached_event_list(
+    category: Optional[str],
+    is_admin: bool,
+    ids: Optional[str] = None,
+    lang: str = "en",
+    include_translations: bool = False,
+) -> Optional[dict]:
     """Get cached event list."""
-    key = get_event_list_cache_key(category, is_admin, ids)
+    key = get_event_list_cache_key(category, is_admin, ids, lang, include_translations)
     return cache.get(key)
 
 
-def set_cached_event_list(category: Optional[str], is_admin: bool, data: dict, ids: Optional[str] = None) -> None:
+def set_cached_event_list(
+    category: Optional[str],
+    is_admin: bool,
+    data: dict,
+    ids: Optional[str] = None,
+    lang: str = "en",
+    include_translations: bool = False,
+) -> None:
     """Cache event list."""
-    key = get_event_list_cache_key(category, is_admin, ids)
+    key = get_event_list_cache_key(category, is_admin, ids, lang, include_translations)
     ttl = _get_ttl("event_list", 60)
     cache.set(key, data, ttl)
 
@@ -113,27 +139,43 @@ def invalidate_event_list() -> None:
 
 
 # Event Detail Cache
-def get_event_detail_cache_key(event_id: str) -> str:
-    return make_key(PREFIX_EVENT_DETAIL, event_id)
+def get_event_detail_cache_key(event_id: str, lang: str = "en", include_translations: bool = False) -> str:
+    return make_key(
+        PREFIX_EVENT_DETAIL,
+        event_id,
+        lang or "en",
+        "translations" if include_translations else "no_translations",
+    )
 
 
-def get_cached_event_detail(event_id: str) -> Optional[dict]:
+def get_cached_event_detail(
+    event_id: str,
+    lang: str = "en",
+    include_translations: bool = False,
+) -> Optional[dict]:
     """Get cached event detail."""
-    key = get_event_detail_cache_key(event_id)
+    key = get_event_detail_cache_key(event_id, lang, include_translations)
     return cache.get(key)
 
 
-def set_cached_event_detail(event_id: str, data: dict) -> None:
+def set_cached_event_detail(
+    event_id: str,
+    data: dict,
+    lang: str = "en",
+    include_translations: bool = False,
+) -> None:
     """Cache event detail."""
-    key = get_event_detail_cache_key(event_id)
+    key = get_event_detail_cache_key(event_id, lang, include_translations)
     ttl = _get_ttl("market_detail", 30)
     cache.set(key, data, ttl)
 
 
 def invalidate_event_detail(event_id: str) -> None:
     """Invalidate event detail cache."""
-    key = get_event_detail_cache_key(event_id)
-    cache.delete(key)
+    try:
+        cache.delete_pattern(f"*{PREFIX_EVENT_DETAIL}:{event_id}*")
+    except AttributeError:
+        cache.delete(get_event_detail_cache_key(event_id))
 
 
 # Market List Cache

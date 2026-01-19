@@ -25,13 +25,17 @@ from django.utils import timezone
 
 from ...models import (
     AmmPool,
+    AmmPoolOptionState,
     BalanceSnapshot,
     Event,
     Market,
     MarketOption,
+    MarketOptionStats,
     MarketSettlement,
     Position,
 )
+from .execution import _recompute_option_probs
+from ..cache import invalidate_on_market_change, invalidate_pool_state
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +58,104 @@ class SettlementError(ValueError):
 def _generate_settlement_tx_id() -> str:
     """Generate a unique settlement transaction ID."""
     return f"settle:{uuid.uuid4()}"
+
+
+def _is_no_option(market: Market, option: MarketOption) -> bool:
+    side = (option.side or "").strip().lower()
+    if side:
+        return side == "no"
+    # Fallback: standard binary index ordering NO=0, YES=1
+    return option.option_index == 0
+
+
+def _set_resolved_option_stats(market: Market, winning_option: MarketOption, now) -> None:
+    """
+    For a resolved market, set winning option prob_bps=10000 and others=0.
+    This avoids stale probabilities after resolution.
+    """
+    stats_rows = list(MarketOptionStats.objects.select_for_update().filter(market=market))
+    if not stats_rows:
+        return
+
+    for row in stats_rows:
+        row.prob_bps = 10000 if row.option_id == winning_option.id else 0
+        row.updated_at = now
+
+    MarketOptionStats.objects.bulk_update(stats_rows, ["prob_bps", "updated_at"])
+
+
+def _refresh_exclusive_pool_probs(pool: AmmPool, now) -> None:
+    """
+    Recompute probabilities for active options in an exclusive event pool.
+    Resolved/canceled markets are excluded to renormalize remaining outcomes.
+    """
+    if pool is None:
+        return
+
+    try:
+        b = float(pool.b)
+    except Exception:
+        return
+
+    if b <= 0:
+        return
+
+    option_states = list(
+        AmmPoolOptionState.objects.select_related("option", "option__market")
+        .filter(pool=pool)
+        .exclude(option__market__status__in=["resolved", "canceled"])
+        .order_by("option__option_index", "option_id")
+    )
+    if not option_states:
+        return
+
+    _recompute_option_probs(option_states, b, now, is_exclusive=True)
+
+
+def _sync_event_status_for_partial(event_id: str, now) -> Event:
+    """
+    Ensure event.status only flips to resolved when all markets are resolved/canceled.
+    If event was mistakenly resolved while unresolved markets remain, revert it.
+    """
+    event = Event.objects.select_for_update().get(pk=event_id)
+    unresolved_exists = Market.objects.filter(event_id=event_id).exclude(
+        status__in=["resolved", "canceled"]
+    ).exists()
+
+    if unresolved_exists:
+        if event.status == "resolved":
+            fallback_status = "active"
+            if event.trading_deadline and event.trading_deadline <= now:
+                fallback_status = "closed"
+            event.status = fallback_status
+            event.resolved_at = None
+            event.resolved_market_id = None
+            event.updated_at = now
+            event.save(update_fields=["status", "resolved_at", "resolved_market_id", "updated_at"])
+        return event
+
+    if event.status != "resolved":
+        event.status = "resolved"
+        event.resolved_at = now
+        resolved_market_id = None
+        if (event.group_rule or "").strip().lower() == "exclusive":
+            resolved_markets = list(
+                Market.objects.filter(event_id=event_id, status="resolved")
+                .values_list("id", "resolved_option_index")
+            )
+            for market_id, resolved_index in resolved_markets:
+                opt = MarketOption.objects.filter(
+                    market_id=market_id, option_index=resolved_index
+                ).only("side", "option_index").first()
+                if opt and ((opt.side or "").strip().lower() == "yes" or opt.option_index == 1):
+                    resolved_market_id = market_id
+                    break
+
+        event.resolved_market_id = resolved_market_id
+        event.updated_at = now
+        event.save(update_fields=["status", "resolved_at", "resolved_market_id", "updated_at"])
+
+    return event
 
 
 def _get_pool_for_market(market: Market) -> Optional[AmmPool]:
@@ -166,6 +268,9 @@ def _resolve_market_internal(
                 updated_at=now,
             )
 
+        # Update option stats to reflect resolution
+        _set_resolved_option_stats(market, winning_option, now)
+
     logger.info(
         "Market resolved: market_id=%s, winning_option_id=%s, winning_option_index=%s",
         market_id,
@@ -229,7 +334,9 @@ def _settle_market_internal(
     settlement_tx_id: Optional[str] = None,
     settled_by_user_id: Optional[str] = None,
     market: Optional[Market] = None,
-    update_status_to_resolved: bool = False,
+    update_market_status: bool = False,
+    update_event_status: bool = False,
+    close_pool: bool = True,
 ) -> Dict:
     """
     Internal function to pay out winners for a resolved market.
@@ -240,7 +347,9 @@ def _settle_market_internal(
         settlement_tx_id: Optional unique ID for idempotency (auto-generated if not provided)
         settled_by_user_id: Optional user who triggered the settlement
         market: Optional pre-locked market object (to avoid re-locking)
-        update_status_to_resolved: If True, update market/event status to resolved after settlement
+        update_market_status: If True, set market.status to resolved after settlement
+        update_event_status: If True, update event status to resolved after settlement
+        close_pool: If True, set pool.status to closed after settlement
 
     Returns:
         Dict with settlement details
@@ -379,9 +488,13 @@ def _settle_market_internal(
     # Update pool balances
     pool.pool_cash = pool_cash - pool_cash_used
     pool.collateral_amount = collateral_amount - collateral_used
-    pool.status = "closed"
+    if close_pool:
+        pool.status = "closed"
     pool.updated_at = now
-    pool.save(update_fields=["pool_cash", "collateral_amount", "status", "updated_at"])
+    pool_update_fields = ["pool_cash", "collateral_amount", "updated_at"]
+    if close_pool:
+        pool_update_fields.append("status")
+    pool.save(update_fields=pool_update_fields)
 
     # Create settlement record (idempotent via unique constraint)
     try:
@@ -408,18 +521,21 @@ def _settle_market_internal(
             "already_settled": True,
         }
 
-    # Update market - NOW set status to resolved (after successful payout)
+    # Update market - NOW set status to resolved (after successful payout if requested)
     market.settled_at = now
     market.settlement_tx_id = settlement_tx_id
     market.updated_at = now
 
-    if update_status_to_resolved:
-        # This is called from resolve_and_settle - set status to resolved now
+    if update_market_status:
+        # Set status to resolved now
         market.status = "resolved"
         market.save(update_fields=["status", "settled_at", "settlement_tx_id", "updated_at"])
 
-        # Also update event status
-        if market.event_id:
+        # Update option stats to reflect resolution
+        _set_resolved_option_stats(market, winning_option, now)
+
+        # Also update event status if requested
+        if update_event_status and market.event_id:
             Event.objects.filter(pk=market.event_id).update(
                 status="resolved",
                 resolved_at=now,
@@ -496,8 +612,122 @@ def settle_market(
         settlement_tx_id=settlement_tx_id,
         settled_by_user_id=settled_by_user_id,
         market=market,
-        update_status_to_resolved=False,
+        update_market_status=False,
+        update_event_status=False,
+        close_pool=True,
     )
+
+
+@transaction.atomic
+def resolve_and_settle_market_partial(
+    *,
+    market_id: str,
+    winning_option_id: Optional[str] = None,
+    winning_option_index: Optional[int] = None,
+    settled_by_user_id: Optional[str] = None,
+) -> Dict:
+    """
+    Partial resolve + settle for exclusive/independent events.
+
+    - Does NOT update event.status to resolved.
+    - For exclusive events, only NO outcomes are allowed and the pool remains active.
+    """
+    if winning_option_id is None and winning_option_index is None:
+        raise SettlementError(
+            "winning_option_id or winning_option_index is required",
+            code="INVALID_PARAM",
+            http_status=400,
+        )
+
+    try:
+        market = Market.objects.select_related("event").get(pk=market_id)
+    except Market.DoesNotExist:
+        raise SettlementError("Market not found", code="MARKET_NOT_FOUND", http_status=404)
+
+    event = market.event
+    if event is None:
+        raise SettlementError(
+            "Partial settlement requires an event",
+            code="EVENT_NOT_FOUND",
+            http_status=400,
+        )
+
+    group_rule = (event.group_rule or "").strip().lower()
+    if group_rule not in ("exclusive", "independent"):
+        raise SettlementError(
+            "Partial settlement is only supported for exclusive/independent events",
+            code="INVALID_GROUP_RULE",
+            http_status=400,
+        )
+
+    try:
+        if winning_option_id:
+            winning_option = MarketOption.objects.get(pk=winning_option_id, market=market)
+        else:
+            winning_option = MarketOption.objects.get(option_index=winning_option_index, market=market)
+    except MarketOption.DoesNotExist:
+        raise SettlementError("Winning option not found for market", code="OPTION_NOT_FOUND", http_status=404)
+
+    if not winning_option.is_active:
+        raise SettlementError("Winning option is not active", code="OPTION_NOT_ACTIVE", http_status=400)
+
+    if group_rule == "exclusive" and not _is_no_option(market, winning_option):
+        raise SettlementError(
+            "Exclusive events can only partially settle a NO outcome",
+            code="INVALID_PARTIAL_OPTION",
+            http_status=400,
+        )
+
+    resolve_result = _resolve_market_internal(
+        market_id=market_id,
+        winning_option_id=str(winning_option.id),
+        winning_option_index=None,
+        resolved_by_user_id=settled_by_user_id,
+        skip_status_update=True,
+    )
+
+    if (
+        resolve_result.get("already_resolved")
+        and resolve_result.get("resolved_option_index") != winning_option.option_index
+    ):
+        raise SettlementError(
+            "Market already resolved with a different outcome",
+            code="ALREADY_RESOLVED",
+            http_status=409,
+        )
+
+    settle_result = _settle_market_internal(
+        market_id=market_id,
+        settled_by_user_id=settled_by_user_id,
+        update_market_status=True,
+        update_event_status=False,
+        close_pool=(group_rule != "exclusive"),
+    )
+
+    now = timezone.now()
+    if group_rule == "exclusive":
+        pool = AmmPool.objects.select_for_update().filter(event_id=event.id).first()
+        _refresh_exclusive_pool_probs(pool, now)
+
+    _sync_event_status_for_partial(str(event.id), now)
+
+    event_market_ids = []
+    if group_rule == "exclusive":
+        event_market_ids = list(
+            Market.objects.filter(event_id=event.id).values_list("id", flat=True)
+        )
+
+    def _invalidate_cache():
+        invalidate_on_market_change(str(market.id), str(event.id))
+        for mid in event_market_ids:
+            invalidate_pool_state(str(mid))
+
+    transaction.on_commit(_invalidate_cache)
+
+    return {
+        "resolution": resolve_result,
+        "settlement": settle_result,
+    }
 
 
 @transaction.atomic
@@ -537,7 +767,9 @@ def resolve_and_settle_market(
     settle_result = _settle_market_internal(
         market_id=market_id,
         settled_by_user_id=settled_by_user_id,
-        update_status_to_resolved=True,  # Set status to resolved after successful payout
+        update_market_status=True,  # Set status to resolved after successful payout
+        update_event_status=True,
+        close_pool=True,
     )
 
     return {

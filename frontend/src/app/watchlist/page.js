@@ -45,12 +45,19 @@ export default function WatchlistPage() {
           const normalized = (eventsData.items || []).map((evt) => {
             const groupRule = evt.group_rule || "standalone"
             const markets = evt.markets || []
+            const eventStatus = String(evt.status || "").toLowerCase()
+            const hideResolvedMarkets = eventStatus !== "resolved"
+            const activeMarkets = markets.filter((m) => {
+              if (String(m.status || "").toLowerCase() === "canceled") return false
+              if (hideResolvedMarkets && String(m.status || "").toLowerCase() === "resolved") return false
+              return true
+            })
             const primaryMarket = evt.primary_market || markets[0]
             const standaloneOutcomes = (primaryMarket?.options || []).map((o) => ({
               name: o.title,
               probability: o.probability ?? (o.probability_bps != null ? Math.round(o.probability_bps / 100) : 0),
             }))
-            const exclusiveOutcomes = markets.map((m, idx) => {
+            const exclusiveOutcomes = activeMarkets.map((m, idx) => {
               const yesOption = (m.options || []).find((o) => String(o.title || "").trim().toLowerCase() === "yes")
               const prob = yesOption?.probability ?? (yesOption?.probability_bps != null ? Math.round(yesOption.probability_bps / 100) : 0)
               return { name: m.title || m.assertion_text || `Option ${idx + 1}`, probability: prob, market_id: m.id }
