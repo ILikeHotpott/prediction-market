@@ -287,7 +287,7 @@ export default function Navigation() {
                             <span className="font-medium">{t("watchlist")}</span>
                           </Link>
                           <div className="h-px bg-[#e6ddcb] my-1" />
-                          <LanguageSelector onSelect={() => setAvatarDropdownOpen(false)} />
+                          <LanguageSelector onSelect={() => setAvatarDropdownOpen(false)} theme="light" />
                           <div className="h-px bg-[#e6ddcb] my-1" />
                           <button
                             onClick={() => { setAvatarDropdownOpen(false); signOut(); }}

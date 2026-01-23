@@ -13,7 +13,7 @@ const languageFlags = {
   ja: "🇯🇵",
 };
 
-export default function LanguageSelector({ onSelect, compact = false }) {
+export default function LanguageSelector({ onSelect, compact = false, theme = "light" }) {
   const { locale, setLocale, locales } = useLanguage();
   const t = useTranslations("language");
   const [isOpen, setIsOpen] = useState(false);
@@ -62,9 +62,14 @@ export default function LanguageSelector({ onSelect, compact = false }) {
   }
 
   // Default list mode for desktop dropdown
+  const isDark = theme === "dark";
+  const textColor = isDark ? "text-white" : "text-gray-700";
+  const hoverBg = isDark ? "hover:bg-white/10" : "hover:bg-black/5";
+  const activeBg = isDark ? "bg-white/5" : "bg-black/5";
+
   return (
     <div className="py-1">
-      <div className="flex items-center gap-3 px-3 py-2 text-white text-sm">
+      <div className={`flex items-center gap-3 px-3 py-2 ${textColor} text-sm`}>
         <Languages className="w-4 h-4" />
         <span className="font-medium">{t("label")}</span>
       </div>
@@ -72,13 +77,13 @@ export default function LanguageSelector({ onSelect, compact = false }) {
         <button
           key={loc}
           onClick={() => handleSelect(loc)}
-          className={`w-full flex items-center gap-3 px-3 py-2 text-white hover:bg-white/10 cursor-pointer ${
-            locale === loc ? "bg-white/5" : ""
+          className={`w-full flex items-center gap-3 px-3 py-2 ${textColor} ${hoverBg} cursor-pointer ${
+            locale === loc ? activeBg : ""
           }`}
         >
           <span className="w-4 text-center">{languageFlags[loc]}</span>
           <span className="font-medium">{t(loc)}</span>
-          {locale === loc && <span className="ml-auto text-white">✓</span>}
+          {locale === loc && <span className={`ml-auto ${textColor}`}>✓</span>}
         </button>
       ))}
     </div>

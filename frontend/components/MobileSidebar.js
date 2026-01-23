@@ -81,7 +81,7 @@ export default function MobileSidebar({ isOpen, onClose }) {
           </div>
 
           <div className="border-t border-white/10 pt-4 mb-8">
-            <LanguageSelector onSelect={onClose} />
+            <LanguageSelector onSelect={onClose} theme="dark" />
           </div>
 
           <button
