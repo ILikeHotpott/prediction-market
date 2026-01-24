@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/pagination";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Copy, Check } from "lucide-react";
+import { ColorPicker } from "@/components/ui/color-picker";
 
 const backendBase =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -37,7 +38,11 @@ export default function AdminMarketsPage() {
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadingTeamA, setUploadingTeamA] = useState(false);
+  const [uploadingTeamB, setUploadingTeamB] = useState(false);
   const fileInputRef = useRef(null);
+  const teamAFileInputRef = useRef(null);
+  const teamBFileInputRef = useRef(null);
   const defaultStandaloneMarkets = [{ title: "Primary", sort_weight: 0 }];
   const defaultMultiMarkets = [
     { title: "Yes", sort_weight: 0 },
@@ -58,12 +63,33 @@ export default function AdminMarketsPage() {
     amm_b: "10000",
     amm_fee_bps: "0",
     amm_collateral_token: "USDC",
+    // Match-specific fields
+    team_a_name: "",
+    team_a_image_url: "",
+    team_a_color: "#22c55e",
+    team_b_name: "",
+    team_b_image_url: "",
+    team_b_color: "#ef4444",
+    allows_draw: false,
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [categories, setCategories] = useState([]);
 
   const validToSubmit = useMemo(() => {
+    // Match events have different validation
+    if (form.group_rule === "match") {
+      const bNum = Number(form.amm_b);
+      const feeNum = Number(form.amm_fee_bps);
+      const ammValid =
+        Number.isFinite(bNum) &&
+        bNum > 0 &&
+        Number.isFinite(feeNum) &&
+        feeNum >= 0 &&
+        feeNum < 10000 &&
+        (form.amm_collateral_token || "").trim();
+      return form.title && form.description && form.trading_deadline && form.team_a_name && form.team_b_name && ammValid;
+    }
     const requiredMarkets = form.group_rule === "standalone" ? 1 : 2;
     const marketsValid =
       Array.isArray(form.markets) &&
@@ -145,6 +171,13 @@ export default function AdminMarketsPage() {
           group_rule: value,
           markets: defaultStandaloneMarkets,
         }));
+      } else if (value === "match") {
+        // Match events don't need markets array - they auto-generate
+        setForm((prev) => ({
+          ...prev,
+          group_rule: value,
+          markets: [],
+        }));
       } else {
         setForm((prev) => {
           const nextMarkets =
@@ -208,6 +241,56 @@ export default function AdminMarketsPage() {
     }
   }
 
+  async function handleTeamAImageUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingTeamA(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${backendBase}/api/upload/image/`, {
+        method: "POST",
+        headers: user ? { "X-User-Id": user.id } : {},
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      handleChange("team_a_image_url", data.url);
+    } catch (err) {
+      setError(err.message || "Upload failed");
+    } finally {
+      setUploadingTeamA(false);
+    }
+  }
+
+  async function handleTeamBImageUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingTeamB(true);
+    setError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${backendBase}/api/upload/image/`, {
+        method: "POST",
+        headers: user ? { "X-User-Id": user.id } : {},
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      handleChange("team_b_image_url", data.url);
+    } catch (err) {
+      setError(err.message || "Upload failed");
+    } finally {
+      setUploadingTeamB(false);
+    }
+  }
+
   async function handleCreate(e) {
     e.preventDefault();
     if (!validToSubmit) return;
@@ -232,7 +315,20 @@ export default function AdminMarketsPage() {
         cover_url: form.cover_url,
         group_rule: form.group_rule || "standalone",
         amm: ammPayload,
-        markets: (form.markets || []).map((m, idx) => ({
+      };
+
+      // Add match-specific fields if this is a match event
+      if (form.group_rule === "match") {
+        payload.team_a_name = form.team_a_name;
+        payload.team_a_image_url = form.team_a_image_url;
+        payload.team_a_color = form.team_a_color;
+        payload.team_b_name = form.team_b_name;
+        payload.team_b_image_url = form.team_b_image_url;
+        payload.team_b_color = form.team_b_color;
+        payload.allows_draw = form.allows_draw;
+      } else {
+        // Non-match events use markets array
+        payload.markets = (form.markets || []).map((m, idx) => ({
           title: m.title,
           bucket_label: m.bucket_label,
           sort_weight: m.sort_weight ?? idx,
@@ -243,8 +339,9 @@ export default function AdminMarketsPage() {
             { title: "YES", side: "yes", option_index: 1 },
           ],
           amm: ammPayload,
-        })),
-      };
+        }));
+      }
+
       const res = await fetch(`${backendBase}/api/events/create/`, {
         method: "POST",
         headers: {
@@ -273,6 +370,13 @@ export default function AdminMarketsPage() {
           amm_b: "10000",
           amm_fee_bps: "0",
           amm_collateral_token: "USDC",
+          team_a_name: "",
+          team_a_image_url: "",
+          team_a_color: "#22c55e",
+          team_b_name: "",
+          team_b_image_url: "",
+          team_b_color: "#ef4444",
+          allows_draw: false,
         });
         fetchEvents();
       }
@@ -490,6 +594,7 @@ export default function AdminMarketsPage() {
                 <option value="standalone">Standalone (single sub-market, Yes/No)</option>
                 <option value="exclusive">Exclusive (multiple sub-markets, pick one answer)</option>
                 <option value="independent">Independent (multiple sub-markets, multi-select)</option>
+                <option value="match">Match (sports/competition with two teams)</option>
               </select>
             </div>
             <div>
@@ -568,6 +673,145 @@ export default function AdminMarketsPage() {
           {form.group_rule === "standalone" ? (
             <div className="mt-6 text-sm text-foreground opacity-80">
               Standalone mode will automatically create a binary market (Yes / No), no need to add sub-markets.
+            </div>
+          ) : form.group_rule === "match" ? (
+            <div className="mt-6">
+              <h3 className="text-lg font-semibold mb-4">Match Settings</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Team A */}
+                <div className="bg-popover border border rounded-lg p-4">
+                  <h4 className="font-medium mb-3">Team A</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-foreground opacity-60">Team Name *</label>
+                      <input
+                        className="w-full mt-1 bg-background border border rounded-lg p-2 text-foreground"
+                        value={form.team_a_name}
+                        onChange={(e) => handleChange("team_a_name", e.target.value)}
+                        placeholder="e.g. Lakers"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-foreground opacity-60">Team Image</label>
+                      <div className="mt-1 flex items-center gap-3">
+                        <input
+                          ref={teamAFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleTeamAImageUpload}
+                          className="hidden"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => teamAFileInputRef.current?.click()}
+                          disabled={uploadingTeamA}
+                        >
+                          {uploadingTeamA ? "Uploading..." : "Upload"}
+                        </Button>
+                        {form.team_a_image_url && (
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={form.team_a_image_url}
+                              alt="Team A"
+                              className="h-10 w-10 object-cover rounded-full border-2"
+                              style={{ borderColor: form.team_a_color }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleChange("team_a_image_url", "")}
+                              className="text-red-400 text-xs hover:text-red-300"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <ColorPicker
+                      label="Button Color"
+                      value={form.team_a_color}
+                      onChange={(color) => handleChange("team_a_color", color)}
+                    />
+                  </div>
+                </div>
+
+                {/* Team B */}
+                <div className="bg-popover border border rounded-lg p-4">
+                  <h4 className="font-medium mb-3">Team B</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-foreground opacity-60">Team Name *</label>
+                      <input
+                        className="w-full mt-1 bg-background border border rounded-lg p-2 text-foreground"
+                        value={form.team_b_name}
+                        onChange={(e) => handleChange("team_b_name", e.target.value)}
+                        placeholder="e.g. Celtics"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-foreground opacity-60">Team Image</label>
+                      <div className="mt-1 flex items-center gap-3">
+                        <input
+                          ref={teamBFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleTeamBImageUpload}
+                          className="hidden"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => teamBFileInputRef.current?.click()}
+                          disabled={uploadingTeamB}
+                        >
+                          {uploadingTeamB ? "Uploading..." : "Upload"}
+                        </Button>
+                        {form.team_b_image_url && (
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={form.team_b_image_url}
+                              alt="Team B"
+                              className="h-10 w-10 object-cover rounded-full border-2"
+                              style={{ borderColor: form.team_b_color }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleChange("team_b_image_url", "")}
+                              className="text-red-400 text-xs hover:text-red-300"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <ColorPicker
+                      label="Button Color"
+                      value={form.team_b_color}
+                      onChange={(color) => handleChange("team_b_color", color)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Allows Draw */}
+              <div className="mt-4 flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="allows_draw"
+                  checked={form.allows_draw}
+                  onChange={(e) => handleChange("allows_draw", e.target.checked)}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="allows_draw" className="text-sm text-foreground">
+                  Allow Draw (creates 3 outcomes: Team A wins, Draw, Team B wins)
+                </label>
+              </div>
             </div>
           ) : (
             <div className="mt-6">

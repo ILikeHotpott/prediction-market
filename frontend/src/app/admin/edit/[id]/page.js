@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import Navigation from "@/components/Navigation"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/components/auth/AuthProvider"
+import { ColorPicker } from "@/components/ui/color-picker"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 
@@ -14,10 +15,14 @@ export default function EditEventPage() {
   const params = useParams()
   const eventId = params?.id
   const fileInputRef = useRef(null)
+  const teamAFileInputRef = useRef(null)
+  const teamBFileInputRef = useRef(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadingTeamA, setUploadingTeamA] = useState(false)
+  const [uploadingTeamB, setUploadingTeamB] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [event, setEvent] = useState(null)
@@ -33,6 +38,14 @@ export default function EditEventPage() {
     trading_deadline: "",
     resolution_deadline: "",
     markets: [],
+    // Match-specific fields
+    team_a_name: "",
+    team_a_image_url: "",
+    team_a_color: "#22c55e",
+    team_b_name: "",
+    team_b_image_url: "",
+    team_b_color: "#ef4444",
+    allows_draw: false,
   })
 
   useEffect(() => {
@@ -79,6 +92,14 @@ export default function EditEventPage() {
           trading_deadline: m.trading_deadline ? m.trading_deadline.slice(0, 16) : "",
           resolution_deadline: m.resolution_deadline ? m.resolution_deadline.slice(0, 16) : "",
         })),
+        // Match-specific fields
+        team_a_name: data.team_a_name || "",
+        team_a_image_url: data.team_a_image_url || "",
+        team_a_color: data.team_a_color || "#22c55e",
+        team_b_name: data.team_b_name || "",
+        team_b_image_url: data.team_b_image_url || "",
+        team_b_color: data.team_b_color || "#ef4444",
+        allows_draw: data.allows_draw || false,
       })
     } catch (err) {
       setError(err.message)
@@ -122,6 +143,52 @@ export default function EditEventPage() {
     }
   }
 
+  async function handleTeamAImageUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingTeamA(true)
+    setError("")
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch(`${backendBase}/api/upload/image/`, {
+        method: "POST",
+        headers: user ? { "X-User-Id": user.id } : {},
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Upload failed")
+      handleChange("team_a_image_url", data.url)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploadingTeamA(false)
+    }
+  }
+
+  async function handleTeamBImageUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingTeamB(true)
+    setError("")
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch(`${backendBase}/api/upload/image/`, {
+        method: "POST",
+        headers: user ? { "X-User-Id": user.id } : {},
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Upload failed")
+      handleChange("team_b_image_url", data.url)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUploadingTeamB(false)
+    }
+  }
+
   async function handleSave(e) {
     e.preventDefault()
     setSaving(true)
@@ -147,6 +214,14 @@ export default function EditEventPage() {
           trading_deadline: m.trading_deadline,
           resolution_deadline: m.resolution_deadline,
         })),
+        // Match-specific fields
+        team_a_name: form.team_a_name,
+        team_a_image_url: form.team_a_image_url,
+        team_a_color: form.team_a_color,
+        team_b_name: form.team_b_name,
+        team_b_image_url: form.team_b_image_url,
+        team_b_color: form.team_b_color,
+        allows_draw: form.allows_draw,
       }
       const res = await fetch(`${backendBase}/api/events/${eventId}/update/`, {
         method: "POST",
@@ -390,6 +465,176 @@ export default function EditEventPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Match Settings (only for match events) */}
+          {event.group_rule === "match" && (
+            <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">Match Settings</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Team A */}
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h3 className="font-semibold text-gray-900 mb-4">Team A</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className={labelClass}>Team Name</label>
+                      <input
+                        type="text"
+                        value={form.team_a_name}
+                        onChange={(e) => handleChange("team_a_name", e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. Lakers"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Team Image</label>
+                      <div className="mt-2 flex items-center gap-4">
+                        {form.team_a_image_url ? (
+                          <img
+                            src={form.team_a_image_url}
+                            alt="Team A"
+                            className="w-16 h-16 object-cover rounded-full border-2"
+                            style={{ borderColor: form.team_a_color }}
+                          />
+                        ) : (
+                          <div
+                            className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold border-2"
+                            style={{
+                              backgroundColor: form.team_a_color + "20",
+                              borderColor: form.team_a_color,
+                              color: form.team_a_color
+                            }}
+                          >
+                            {(form.team_a_name || "A").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          <input
+                            ref={teamAFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleTeamAImageUpload}
+                            className="hidden"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-gray-700 border-gray-300 hover:bg-gray-100"
+                            onClick={() => teamAFileInputRef.current?.click()}
+                            disabled={uploadingTeamA}
+                          >
+                            {uploadingTeamA ? "Uploading..." : "Upload Image"}
+                          </Button>
+                          {form.team_a_image_url && (
+                            <button
+                              type="button"
+                              onClick={() => handleChange("team_a_image_url", "")}
+                              className="text-red-500 text-xs hover:text-red-700"
+                            >
+                              Remove Image
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <ColorPicker
+                      label="Button Color"
+                      value={form.team_a_color}
+                      onChange={(color) => handleChange("team_a_color", color)}
+                    />
+                  </div>
+                </div>
+
+                {/* Team B */}
+                <div className="bg-gray-50 rounded-xl p-6">
+                  <h3 className="font-semibold text-gray-900 mb-4">Team B</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className={labelClass}>Team Name</label>
+                      <input
+                        type="text"
+                        value={form.team_b_name}
+                        onChange={(e) => handleChange("team_b_name", e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. Celtics"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Team Image</label>
+                      <div className="mt-2 flex items-center gap-4">
+                        {form.team_b_image_url ? (
+                          <img
+                            src={form.team_b_image_url}
+                            alt="Team B"
+                            className="w-16 h-16 object-cover rounded-full border-2"
+                            style={{ borderColor: form.team_b_color }}
+                          />
+                        ) : (
+                          <div
+                            className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold border-2"
+                            style={{
+                              backgroundColor: form.team_b_color + "20",
+                              borderColor: form.team_b_color,
+                              color: form.team_b_color
+                            }}
+                          >
+                            {(form.team_b_name || "B").charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          <input
+                            ref={teamBFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleTeamBImageUpload}
+                            className="hidden"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-gray-700 border-gray-300 hover:bg-gray-100"
+                            onClick={() => teamBFileInputRef.current?.click()}
+                            disabled={uploadingTeamB}
+                          >
+                            {uploadingTeamB ? "Uploading..." : "Upload Image"}
+                          </Button>
+                          {form.team_b_image_url && (
+                            <button
+                              type="button"
+                              onClick={() => handleChange("team_b_image_url", "")}
+                              className="text-red-500 text-xs hover:text-red-700"
+                            >
+                              Remove Image
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <ColorPicker
+                      label="Button Color"
+                      value={form.team_b_color}
+                      onChange={(color) => handleChange("team_b_color", color)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Allows Draw */}
+              <div className="mt-6 flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="allows_draw_edit"
+                  checked={form.allows_draw}
+                  onChange={(e) => handleChange("allows_draw", e.target.checked)}
+                  className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <label htmlFor="allows_draw_edit" className="text-sm font-medium text-gray-800">
+                  Allow Draw (3 outcomes: Team A wins, Draw, Team B wins)
+                </label>
               </div>
             </div>
           )}

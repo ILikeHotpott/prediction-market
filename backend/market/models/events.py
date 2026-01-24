@@ -50,6 +50,15 @@ class Event(models.Model):
     trading_deadline = models.DateTimeField(null=True, blank=True)
     resolution_deadline = models.DateTimeField(null=True, blank=True)
 
+    # Match-specific fields
+    team_a_name = models.TextField(null=True, blank=True)
+    team_a_image_url = models.TextField(null=True, blank=True)
+    team_a_color = models.TextField(default="#22c55e", blank=True)
+    team_b_name = models.TextField(null=True, blank=True)
+    team_b_image_url = models.TextField(null=True, blank=True)
+    team_b_color = models.TextField(default="#ef4444", blank=True)
+    allows_draw = models.BooleanField(default=False)
+
     class Meta:
         managed = False
         db_table = "events"

@@ -41,6 +41,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
   const yesOutcome = outcomes.find((o) => String(o.name || "").trim().toLowerCase() === "yes")
   const isBinaryYesNo = outcomeNames.length === 2 && outcomeNames.includes("yes") && outcomeNames.includes("no")
   const isStandalone = !market.group_rule || market.group_rule === "standalone"
+  const isMatch = market.group_rule === "match"
   const showStandaloneBinary = isStandalone && isBinaryYesNo
 
   // 每次 spinKey 变化时重新生成随机花色
@@ -69,7 +70,25 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
     () => `chance-track-${market.id || market.slug || Math.random().toString(36).slice(2)}`,
     [market.id, market.slug]
   )
-  
+
+  // Match-specific rendering
+  if (isMatch) {
+    return (
+      <Link href={`/market/${market.id}`} className="block">
+        <Card className="market-card market-card--match">
+          <MatchCardContent
+            market={market}
+            outcomes={outcomes}
+            formatProb={formatProb}
+            isWatched={isWatched}
+            onToggleWatchlist={onToggleWatchlist}
+            volumeLabel={t("volume")}
+          />
+        </Card>
+      </Link>
+    )
+  }
+
   return (
     <Link href={`/market/${market.id}`} className="block">
       <Card className={`market-card ${showStandaloneBinary ? "market-card--standalone" : ""}`}>
@@ -180,6 +199,113 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
     </Link>
   )
 })
+
+function MatchCardContent({ market, outcomes, formatProb, isWatched, onToggleWatchlist, volumeLabel }) {
+  const teamAName = market.team_a_name || outcomes[0]?.name || "Team A"
+  const teamBName = market.team_b_name || outcomes[outcomes.length - 1]?.name || "Team B"
+  const teamAImage = market.team_a_image_url
+  const teamBImage = market.team_b_image_url
+  const teamAColor = market.team_a_color || "#6c9b78"
+  const teamBColor = market.team_b_color || "#c65a5a"
+  const allowsDraw = market.allows_draw || outcomes.length === 3
+
+  // Get probabilities from outcomes
+  const teamAOutcome = outcomes[0]
+  const drawOutcome = allowsDraw ? outcomes[1] : null
+  const teamBOutcome = allowsDraw ? outcomes[2] : outcomes[1]
+
+  const getProb = (outcome) => {
+    if (!outcome) return null
+    return outcome.probability ??
+      (outcome.probability_bps != null ? Math.round(outcome.probability_bps / 100) : null)
+  }
+
+  const teamAProb = getProb(teamAOutcome)
+  const drawProb = getProb(drawOutcome)
+  const teamBProb = getProb(teamBOutcome)
+
+  const cleanTitle = String(market.title || "").trim()
+  const displayTitle = cleanTitle.length > 60 ? `${cleanTitle.slice(0, 60)}...` : cleanTitle
+
+  return (
+    <>
+      {/* Header - similar to standalone card */}
+      <div className="market-card-header market-card-header--standalone">
+        <div className="market-card-header-main">
+          {/* Team images as badge */}
+          <div className="match-badge">
+            <div className="match-badge-team">
+              {teamAImage ? (
+                <img src={teamAImage} alt={teamAName} className="match-badge-img" />
+              ) : (
+                <div className="match-badge-placeholder" style={{ backgroundColor: teamAColor }}>
+                  {teamAName.charAt(0)}
+                </div>
+              )}
+            </div>
+            <div className="match-badge-team match-badge-team--overlap">
+              {teamBImage ? (
+                <img src={teamBImage} alt={teamBName} className="match-badge-img" />
+              ) : (
+                <div className="match-badge-placeholder" style={{ backgroundColor: teamBColor }}>
+                  {teamBName.charAt(0)}
+                </div>
+              )}
+            </div>
+          </div>
+          <h3 className="market-card-title" style={{ fontFamily: 'Google Sans, sans-serif' }}>
+            {displayTitle}
+          </h3>
+        </div>
+      </div>
+
+      {/* Buttons - styled like YES/NO but with team colors */}
+      <div className="market-card-body market-card-body--standalone">
+        <div className={`market-card-actions ${allowsDraw ? "market-card-actions--three" : ""}`}>
+          <button
+            className="market-chip"
+            style={{ backgroundColor: teamAColor, borderColor: teamAColor }}
+          >
+            {teamAName}
+          </button>
+          {allowsDraw && (
+            <button
+              className="market-chip"
+              style={{ backgroundColor: "#9ca3af", borderColor: "#9ca3af" }}
+            >
+              Draw
+            </button>
+          )}
+          <button
+            className="market-chip"
+            style={{ backgroundColor: teamBColor, borderColor: teamBColor }}
+          >
+            {teamBName}
+          </button>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="market-card-footer">
+        <span className="market-volume">{market.volume} {volumeLabel}. </span>
+        <div className="market-footer-actions">
+          <button
+            className="market-footer-icon"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggleWatchlist?.(market.id)
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={isWatched ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
 
 function ChanceGauge({ value, formatProb, gradientId, trackId, chanceLabel = "chance" }) {
   const data = [{ name: "chance", value }]

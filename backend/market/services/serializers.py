@@ -128,6 +128,14 @@ def serialize_event(event: Event, lang: str = "en", include_all_translations: bo
         "updated_at": event.updated_at.isoformat() if event.updated_at else None,
         "markets": market_payload,
         "primary_market": primary_market,
+        # Match-specific fields
+        "team_a_name": getattr(event, "team_a_name", None),
+        "team_a_image_url": getattr(event, "team_a_image_url", None),
+        "team_a_color": getattr(event, "team_a_color", None) or "#22c55e",
+        "team_b_name": getattr(event, "team_b_name", None),
+        "team_b_image_url": getattr(event, "team_b_image_url", None),
+        "team_b_color": getattr(event, "team_b_color", None) or "#ef4444",
+        "allows_draw": getattr(event, "allows_draw", False),
     }
 
     if include_all_translations and translations:

@@ -95,7 +95,7 @@ ALLOWED_EVENT_STATUSES = {
     "canceled",
 }
 
-ALLOWED_GROUP_RULES = {"standalone", "exclusive", "independent"}
+ALLOWED_GROUP_RULES = {"standalone", "exclusive", "independent", "match"}
 
 
 def _decode_payload(request):
@@ -156,6 +156,9 @@ def _derive_group_rule(payload: Dict[str, Any], markets_data: List[Dict[str, Any
         rule = str(explicit).strip().lower()
         if rule not in ALLOWED_GROUP_RULES:
             raise ValueError("Invalid group_rule")
+        # Match events are handled specially - don't apply normal market inference
+        if rule == "match":
+            return rule
         return rule
 
     has_explicit_markets = isinstance(payload.get("markets"), list) and len(payload.get("markets") or []) > 0
@@ -173,6 +176,37 @@ def _derive_group_rule(payload: Dict[str, Any], markets_data: List[Dict[str, Any
 def _normalize_markets_payload(payload, title, description, trading_deadline, resolution_deadline):
     markets_data = payload.get("markets")
     options_data = payload.get("options") or []
+
+    # Check if this is a match event
+    group_rule = payload.get("group_rule", "").strip().lower()
+    if group_rule == "match":
+        # For match events, we auto-generate the market and options
+        # based on team names and allows_draw setting
+        team_a_name = payload.get("team_a_name") or "Team A"
+        team_b_name = payload.get("team_b_name") or "Team B"
+        allows_draw = payload.get("allows_draw", False)
+
+        # Create options based on allows_draw
+        if allows_draw:
+            options = [
+                {"title": team_a_name, "side": "yes", "option_index": 0},
+                {"title": "Draw", "side": None, "option_index": 1},
+                {"title": team_b_name, "side": "no", "option_index": 2},
+            ]
+        else:
+            options = [
+                {"title": team_a_name, "side": "yes", "option_index": 0},
+                {"title": team_b_name, "side": "no", "option_index": 1},
+            ]
+
+        markets_data = [{
+            "title": title,
+            "description": description,
+            "options": options,
+            "trading_deadline": trading_deadline,
+            "resolution_deadline": resolution_deadline,
+        }]
+        return markets_data, "match"
 
     if not isinstance(markets_data, list) or len(markets_data) == 0:
         if options_data:
@@ -568,6 +602,16 @@ def create_event(request):
         "resolution_deadline": resolution_deadline,
     }
 
+    # Add match-specific fields if this is a match event
+    if event_group_rule == "match":
+        event_fields["team_a_name"] = payload.get("team_a_name")
+        event_fields["team_a_image_url"] = payload.get("team_a_image_url")
+        event_fields["team_a_color"] = payload.get("team_a_color") or "#22c55e"
+        event_fields["team_b_name"] = payload.get("team_b_name")
+        event_fields["team_b_image_url"] = payload.get("team_b_image_url")
+        event_fields["team_b_color"] = payload.get("team_b_color") or "#ef4444"
+        event_fields["allows_draw"] = payload.get("allows_draw", False)
+
     event = _create_event_with_markets(event_fields, markets_data, amm_params_list, payload, created_by)
 
     # Auto-translate event title and description to all supported languages
@@ -705,6 +749,22 @@ def update_event(request, event_id):
         event.trading_deadline = parse_iso_datetime(payload["trading_deadline"])
     if "resolution_deadline" in payload:
         event.resolution_deadline = parse_iso_datetime(payload["resolution_deadline"])
+
+    # Match-specific fields
+    if "team_a_name" in payload:
+        event.team_a_name = payload["team_a_name"]
+    if "team_a_image_url" in payload:
+        event.team_a_image_url = payload["team_a_image_url"]
+    if "team_a_color" in payload:
+        event.team_a_color = payload["team_a_color"]
+    if "team_b_name" in payload:
+        event.team_b_name = payload["team_b_name"]
+    if "team_b_image_url" in payload:
+        event.team_b_image_url = payload["team_b_image_url"]
+    if "team_b_color" in payload:
+        event.team_b_color = payload["team_b_color"]
+    if "allows_draw" in payload:
+        event.allows_draw = payload["allows_draw"]
 
     event.updated_at = timezone.now()
     event.save()

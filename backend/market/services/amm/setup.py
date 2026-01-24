@@ -64,6 +64,7 @@ class GroupRule(str, Enum):
     STANDALONE = "standalone"
     EXCLUSIVE = "exclusive"
     INDEPENDENT = "independent"
+    MATCH = "match"
 
 
 class OptionSide(str, Enum):

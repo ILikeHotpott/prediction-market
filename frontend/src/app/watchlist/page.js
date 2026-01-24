@@ -73,6 +73,14 @@ export default function WatchlistPage() {
               image: evt.cover_url || primaryMarket?.cover_url || "📈",
               volume: formatVolume(rawVolume),
               group_rule: groupRule,
+              // Match-specific fields
+              team_a_name: evt.team_a_name,
+              team_a_image_url: evt.team_a_image_url,
+              team_a_color: evt.team_a_color,
+              team_b_name: evt.team_b_name,
+              team_b_image_url: evt.team_b_image_url,
+              team_b_color: evt.team_b_color,
+              allows_draw: evt.allows_draw,
             }
           })
           setEvents(normalized)
