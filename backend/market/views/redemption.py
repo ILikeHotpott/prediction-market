@@ -13,6 +13,7 @@ from django.views.decorators.http import require_http_methods
 
 from ..models import BalanceSnapshot, RedemptionCode, User
 from ..services.auth import get_user_from_request
+from ..services.cache import invalidate_user_portfolio
 
 
 def _get_admin_user(request):
@@ -156,6 +157,7 @@ def redeem_code(request):
         balance.available_amount += redemption.amount
         balance.updated_at = timezone.now()
         balance.save()
+        transaction.on_commit(lambda: invalidate_user_portfolio(str(user.id)))
 
     return JsonResponse({
         "success": True,

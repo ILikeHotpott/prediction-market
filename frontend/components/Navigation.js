@@ -96,6 +96,7 @@ export default function Navigation() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentCategory = searchParams.get("category");
+  const lastStripeSessionRef = useRef(null);
 
   const displayName = useMemo(() => {
     if (!user) return "User";
@@ -118,6 +119,46 @@ export default function Navigation() {
   const isAuthed = !!session;
 
   const fmt = (n) => `$${Number(n || 0).toFixed(2)}`;
+
+  useEffect(() => {
+    const depositStatus = searchParams.get("deposit");
+    if (depositStatus !== "success") return;
+
+    const sessionId = searchParams.get("session_id");
+    if (sessionId && lastStripeSessionRef.current === sessionId) return;
+
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("deposit");
+    cleanUrl.searchParams.delete("session_id");
+    router.replace(`${cleanUrl.pathname}${cleanUrl.search}`);
+
+    if (!user?.id || !backendBase) return;
+
+    async function confirmStripeDeposit() {
+      if (!sessionId) {
+        refreshPortfolio();
+        return;
+      }
+      lastStripeSessionRef.current = sessionId;
+      try {
+        const res = await fetch(`${backendBase}/api/users/me/stripe/confirm/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-User-Id": user.id,
+          },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+        if (!res.ok) {
+          await res.json().catch(() => ({}));
+        }
+      } finally {
+        refreshPortfolio();
+      }
+    }
+
+    confirmStripeDeposit();
+  }, [searchParams, router, user?.id, refreshPortfolio]);
 
   return (
     <nav className="sticky top-0 z-50 bg-background shadow-md">

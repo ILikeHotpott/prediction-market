@@ -1,7 +1,7 @@
 from django.urls import path
 from django.http import JsonResponse
 
-from .views import admin, amm, comments, events, market, orders, redemption, search, series, tags, translations, upload, users, watchlist
+from .views import admin, amm, comments, events, market, orders, redemption, search, series, stripe_payments, tags, translations, upload, users, watchlist
 
 
 def health_check(request):
@@ -141,6 +141,19 @@ urlpatterns = [
         redemption.redeem_code,
         name="user-redeem-code",
     ),
+    # Stripe deposit endpoints
+    path("api/stripe/packages/", stripe_payments.list_packages, name="stripe-packages"),
+    path(
+        "api/users/me/stripe/checkout-session/",
+        stripe_payments.create_checkout_session,
+        name="stripe-checkout-session",
+    ),
+    path(
+        "api/users/me/stripe/confirm/",
+        stripe_payments.confirm_checkout_session,
+        name="stripe-confirm-session",
+    ),
+    path("api/stripe/webhook/", stripe_payments.webhook, name="stripe-webhook"),
     # Tags management
     path("api/tags/", tags.list_tags, name="tags-list"),
     path("api/admin/tags/create/", tags.create_tag, name="admin-tags-create"),
@@ -150,4 +163,3 @@ urlpatterns = [
     path("api/admin/users/", admin.admin_list_users, name="admin-users-list"),
     path("api/admin/users/<uuid:user_id>/role/", admin.admin_update_user_role, name="admin-users-role"),
 ]
-
