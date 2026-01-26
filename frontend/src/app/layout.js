@@ -8,6 +8,11 @@ import MobileBottomNav from "@/components/MobileBottomNav";
 export const metadata = {
   title: "Monofuture - Prediction Market",
   description: "Bet on your beliefs",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }) {

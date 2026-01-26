@@ -172,6 +172,7 @@ export default function Navigation() {
           </Link>
 
           <div className="flex items-center gap-3">
+            <LanguageSelector onSelect={() => {}} compact />
             {!isAuthed ? (
               <>
                 <button
@@ -189,7 +190,6 @@ export default function Navigation() {
               </>
             ) : (
               <>
-                <LanguageSelector onSelect={() => {}} compact />
                 <Bell className="w-6 h-6 text-white/60" />
                 <button
                   onClick={() => setMobileSidebarOpen(true)}
@@ -223,6 +223,7 @@ export default function Navigation() {
             <div className="hidden md:flex items-center gap-5">
               {!isAuthed ? (
                 <>
+                  <LanguageSelector onSelect={() => {}} compact />
                   <button
                     className="text-accent hover:text-white font-semibold font-display tracking-wide uppercase"
                     onClick={() => openAuthModal("login")}

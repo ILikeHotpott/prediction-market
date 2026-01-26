@@ -165,6 +165,7 @@ a,
 }
 
 .market-card {
+  --market-footer-height: 20px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -357,11 +358,6 @@ a,
 
 .market-card--standalone .market-card-actions {
   margin-top: -5px;
-}
-
-.market-card--standalone .market-card-footer {
-  margin-top: 0;
-  padding-top: 0;
 }
 
 .binary-outcome-list {
@@ -573,25 +569,38 @@ a,
 }
 
 .market-card-footer {
+  margin-top: auto;
+  height: var(--market-footer-height);
+  flex: 0 0 var(--market-footer-height);
+  display: flex;
+  align-items: stretch;
+  padding: 0;
+  font-size: 10.5px;
+  line-height: 1;
+  color: #4b5563;
+  position: relative;
+  z-index: 1;
+  box-shadow: inset 0 1px 0 #eadfcb;
+}
+
+.market-card-footer__content {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: auto;
-  border-top: 1px solid #eadfcb;
-  padding-top: 8px;
-  min-height: 24px;
-  font-size: 10.5px;
-  line-height: 1.15;
-  color: #4b5563;
-  position: relative;
-  z-index: 1;
+  width: 100%;
+  min-width: 0;
 }
 
 .market-volume {
   font-weight: 600;
   letter-spacing: 0.02em;
   font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  line-height: 1;
 }
 
 .market-footer-actions {
@@ -599,10 +608,14 @@ a,
   align-items: center;
   gap: 8px;
   color: #9a4e00;
+  height: 100%;
 }
 
 .market-footer-icon {
-  padding: 5px;
+  width: 20px;
+  height: 20px;
+  padding: 2px;
+  box-sizing: border-box;
   border-radius: 8px;
   background: transparent;
   border: none;
@@ -867,38 +880,54 @@ a,
   height: 200px;
 }
 
-/* Match badge - two overlapping team images */
-.match-badge {
+/* Match teams container */
+.match-teams-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Match team row - horizontal layout */
+.match-team-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.match-team-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.match-team-avatar {
   flex-shrink: 0;
 }
 
-.match-badge-team {
-  position: relative;
-}
-
-.match-badge-team--overlap {
-  margin-left: -12px;
-}
-
-.match-badge-img {
-  width: 40px;
-  height: 40px;
+.match-team-img {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid #f9f6ee;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.match-badge-placeholder {
-  width: 40px;
-  height: 40px;
+.match-team-placeholder {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 700;
   color: #fff;
   border: 2px solid #f9f6ee;
@@ -906,13 +935,31 @@ a,
   text-transform: uppercase;
 }
 
-/* Three button layout for match with draw */
-.market-card-actions--three {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+.match-team-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.market-card-actions--three .market-chip {
-  padding: 13px 8px;
-  font-size: 11px;
+.match-team-prob {
+  font-size: 16px;
+  font-weight: 800;
+  color: #1f2937;
+  flex-shrink: 0;
+  min-width: 45px;
+  text-align: right;
+}
+
+/* Match card button adjustments */
+.market-card--match .market-card-actions {
+  margin-top: 8px;
+  gap: 12px;
+}
+
+.market-card--match .market-card-body--standalone {
+  flex: 1;
+  margin-top: 0;
 }

@@ -42,6 +42,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
   const isBinaryYesNo = outcomeNames.length === 2 && outcomeNames.includes("yes") && outcomeNames.includes("no")
   const isStandalone = !market.group_rule || market.group_rule === "standalone"
   const isMatch = market.group_rule === "match"
+  const isGrouped = !isStandalone
   const showStandaloneBinary = isStandalone && isBinaryYesNo
 
   // 每次 spinKey 变化时重新生成随机花色
@@ -75,7 +76,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
   if (isMatch) {
     return (
       <Link href={`/market/${market.id}`} className="block">
-        <Card className="market-card market-card--match">
+        <Card className={`market-card market-card--match ${isGrouped ? "market-card--grouped" : ""}`}>
           <MatchCardContent
             market={market}
             outcomes={outcomes}
@@ -91,7 +92,9 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
 
   return (
     <Link href={`/market/${market.id}`} className="block">
-      <Card className={`market-card ${showStandaloneBinary ? "market-card--standalone" : ""}`}>
+      <Card
+        className={`market-card${showStandaloneBinary ? " market-card--standalone" : ""}${isGrouped ? " market-card--grouped" : ""}`}
+      >
         {/* 左上角正方形图片 */}
         {market.image && market.image.startsWith("http") && (
           <div className="absolute top-3 left-3 pointer-events-none z-0">
@@ -172,29 +175,12 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
           )}
         </div>
 
-        <div className="market-card-footer">
-          <span className="market-volume">{market.volume} {t("volume")}. </span>
-          <div className="market-footer-actions">
-            {/* <button className="market-footer-icon" onClick={(e) => e.preventDefault()}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-              </svg>
-            </button> */}
-            <button
-              className="market-footer-icon"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onToggleWatchlist?.(market.id)
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill={isWatched ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+        <MarketCardFooter
+          market={market}
+          volumeLabel={t("volume")}
+          isWatched={isWatched}
+          onToggleWatchlist={onToggleWatchlist}
+        />
       </Card>
     </Link>
   )
@@ -207,12 +193,10 @@ function MatchCardContent({ market, outcomes, formatProb, isWatched, onToggleWat
   const teamBImage = market.team_b_image_url
   const teamAColor = market.team_a_color || "#6c9b78"
   const teamBColor = market.team_b_color || "#c65a5a"
-  const allowsDraw = market.allows_draw || outcomes.length === 3
 
   // Get probabilities from outcomes
   const teamAOutcome = outcomes[0]
-  const drawOutcome = allowsDraw ? outcomes[1] : null
-  const teamBOutcome = allowsDraw ? outcomes[2] : outcomes[1]
+  const teamBOutcome = outcomes[outcomes.length - 1]
 
   const getProb = (outcome) => {
     if (!outcome) return null
@@ -221,61 +205,56 @@ function MatchCardContent({ market, outcomes, formatProb, isWatched, onToggleWat
   }
 
   const teamAProb = getProb(teamAOutcome)
-  const drawProb = getProb(drawOutcome)
   const teamBProb = getProb(teamBOutcome)
-
-  const cleanTitle = String(market.title || "").trim()
-  const displayTitle = cleanTitle.length > 60 ? `${cleanTitle.slice(0, 60)}...` : cleanTitle
 
   return (
     <>
-      {/* Header - similar to standalone card */}
-      <div className="market-card-header market-card-header--standalone">
-        <div className="market-card-header-main">
-          {/* Team images as badge */}
-          <div className="match-badge">
-            <div className="match-badge-team">
+      {/* Match teams layout */}
+      <div className="match-teams-container">
+        {/* Team A Row */}
+        <div className="match-team-row">
+          <div className="match-team-info">
+            <div className="match-team-avatar">
               {teamAImage ? (
-                <img src={teamAImage} alt={teamAName} className="match-badge-img" />
+                <img src={teamAImage} alt={teamAName} className="match-team-img" />
               ) : (
-                <div className="match-badge-placeholder" style={{ backgroundColor: teamAColor }}>
+                <div className="match-team-placeholder" style={{ backgroundColor: teamAColor }}>
                   {teamAName.charAt(0)}
                 </div>
               )}
             </div>
-            <div className="match-badge-team match-badge-team--overlap">
+            <span className="match-team-name">{teamAName}</span>
+          </div>
+          <span className="match-team-prob">{formatProb(teamAProb)}</span>
+        </div>
+
+        {/* Team B Row */}
+        <div className="match-team-row">
+          <div className="match-team-info">
+            <div className="match-team-avatar">
               {teamBImage ? (
-                <img src={teamBImage} alt={teamBName} className="match-badge-img" />
+                <img src={teamBImage} alt={teamBName} className="match-team-img" />
               ) : (
-                <div className="match-badge-placeholder" style={{ backgroundColor: teamBColor }}>
+                <div className="match-team-placeholder" style={{ backgroundColor: teamBColor }}>
                   {teamBName.charAt(0)}
                 </div>
               )}
             </div>
+            <span className="match-team-name">{teamBName}</span>
           </div>
-          <h3 className="market-card-title" style={{ fontFamily: 'Google Sans, sans-serif' }}>
-            {displayTitle}
-          </h3>
+          <span className="match-team-prob">{formatProb(teamBProb)}</span>
         </div>
       </div>
 
-      {/* Buttons - styled like YES/NO but with team colors */}
+      {/* Team buttons */}
       <div className="market-card-body market-card-body--standalone">
-        <div className={`market-card-actions ${allowsDraw ? "market-card-actions--three" : ""}`}>
+        <div className="market-card-actions">
           <button
             className="market-chip"
             style={{ backgroundColor: teamAColor, borderColor: teamAColor }}
           >
             {teamAName}
           </button>
-          {allowsDraw && (
-            <button
-              className="market-chip"
-              style={{ backgroundColor: "#9ca3af", borderColor: "#9ca3af" }}
-            >
-              Draw
-            </button>
-          )}
           <button
             className="market-chip"
             style={{ backgroundColor: teamBColor, borderColor: teamBColor }}
@@ -286,23 +265,12 @@ function MatchCardContent({ market, outcomes, formatProb, isWatched, onToggleWat
       </div>
 
       {/* Footer */}
-      <div className="market-card-footer">
-        <span className="market-volume">{market.volume} {volumeLabel}. </span>
-        <div className="market-footer-actions">
-          <button
-            className="market-footer-icon"
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              onToggleWatchlist?.(market.id)
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill={isWatched ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
+      <MarketCardFooter
+        market={market}
+        volumeLabel={volumeLabel}
+        isWatched={isWatched}
+        onToggleWatchlist={onToggleWatchlist}
+      />
     </>
   )
 }
@@ -347,6 +315,30 @@ function ChanceGauge({ value, formatProb, gradientId, trackId, chanceLabel = "ch
       <div className="chance-gauge__value">
         <div className="chance-gauge__percent">{formatProb(value)}</div>
         <div className="chance-gauge__label">{chanceLabel}</div>
+      </div>
+    </div>
+  )
+}
+
+function MarketCardFooter({ market, volumeLabel, isWatched, onToggleWatchlist }) {
+  return (
+    <div className="market-card-footer">
+      <div className="market-card-footer__content">
+        <span className="market-volume">{market.volume} {volumeLabel}. </span>
+        <div className="market-footer-actions">
+          <button
+            className="market-footer-icon"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggleWatchlist?.(market.id)
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={isWatched ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   )
