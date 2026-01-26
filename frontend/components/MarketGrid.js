@@ -91,13 +91,15 @@ function normalizeEvents(items) {
     const standaloneOutcomes = (primaryMarket?.options || []).map((o) => ({
       name: o.title,
       probability: o.probability ?? (o.probability_bps != null ? Math.round(o.probability_bps / 100) : 0),
+      probability_bps: o.probability_bps,
     }))
     const exclusiveOutcomes = activeMarkets.map((m, idx) => {
       const yesOption = (m.options || []).find((o) => String(o.title || "").trim().toLowerCase() === "yes")
       const prob = yesOption?.probability ?? (yesOption?.probability_bps != null ? Math.round(yesOption.probability_bps / 100) : 0)
       return { name: m.title || m.assertion_text || `Option ${idx + 1}`, probability: prob, market_id: m.id }
     }).sort((a, b) => b.probability - a.probability)
-    const multiOutcomes = groupRule === "standalone" ? standaloneOutcomes : exclusiveOutcomes
+    // For match events, use standaloneOutcomes (options from primary market with team names)
+    const multiOutcomes = (groupRule === "standalone" || groupRule === "match") ? standaloneOutcomes : exclusiveOutcomes
     const outcomeNames = standaloneOutcomes.map((o) => String(o.name || "").toLowerCase())
     const isBinaryYesNo = outcomeNames.length === 2 && outcomeNames.includes("yes") && outcomeNames.includes("no")
     const yesOption = standaloneOutcomes.find((o) => String(o.name || "").toLowerCase() === "yes")
