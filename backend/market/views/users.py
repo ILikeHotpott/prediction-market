@@ -652,19 +652,35 @@ def pnl_history(request):
         settled_date = (sp.market.resolved_at or sp.market.updated_at or now).date().isoformat()
         daily_realized_pnl[settled_date] += settled_pnl
 
-    # 未实现收益：当前持仓市值 - 持仓成本（只针对活跃市场）
-    unrealized_pnl = Decimal(0)
+    # 未实现收益：用 LMSR 严格现金退出估值（只针对活跃市场）
     positions = Position.objects.filter(
         user=user, shares__gt=0
-    ).select_related("option__stats").exclude(
+    ).select_related("market", "market__event").exclude(
         market__status__in=["resolved", "canceled"]
-    ).only("shares", "cost_basis", "option__stats__prob_bps")
+    )
+    pool_states = _batch_load_pool_states(positions)
+    total_cash_out = Decimal(0)
+    total_cost_basis = Decimal(0)
     for pos in positions:
-        stats = getattr(pos.option, "stats", None) if pos.option else None
-        if stats and stats.prob_bps is not None:
-            price = Decimal(stats.prob_bps) / Decimal(10000)
-            market_value = price * pos.shares
-            unrealized_pnl += market_value - pos.cost_basis
+        mid_str = str(pos.market_id)
+        cash_out_value = Decimal(0)
+        if mid_str in pool_states:
+            try:
+                state = pool_states[mid_str]
+                target_idx, is_no_side = state.resolve_with_side(option_id=str(pos.option_id), option_index=None)
+                quote = quote_from_state(
+                    state,
+                    option_id=str(pos.option_id),
+                    side="sell",
+                    shares=pos.shares,
+                    is_no_side=is_no_side,
+                )
+                cash_out_value = Decimal(quote["amount_out"])
+            except (QuoteError, Exception):
+                cash_out_value = Decimal(0)
+        total_cash_out += cash_out_value
+        total_cost_basis += pos.cost_basis
+    unrealized_pnl = total_cash_out - total_cost_basis
 
     # 生成数据点（只有结算事件才会产生历史数据点）
     data_points = []

@@ -304,7 +304,6 @@ export default function PortfolioPage() {
   const cashValue = useMemo(() => Number(balance?.available_amount || 0), [balance])
   const holdingsValue = useMemo(() => Number(portfolio?.portfolio_value || 0), [portfolio])
   const totalCashOut = useMemo(() => Number(portfolio?.total_cash_out_value || 0), [portfolio])
-  const totalPnl = useMemo(() => Number(portfolio?.total_pnl || 0), [portfolio])
   const totalValue = useMemo(() => cashValue + holdingsValue, [cashValue, holdingsValue])
   const historyPageCount = useMemo(() => {
     const total = Number.isFinite(historyTotal) ? historyTotal : 0
@@ -417,14 +416,6 @@ export default function PortfolioPage() {
                         <div>
                           <div className="text-xs text-slate-500 uppercase tracking-wide">{t("holdings")}</div>
                           <div className="text-lg font-semibold text-slate-800">${holdingsValue.toFixed(2)}</div>
-                        </div>
-                      </div>
-                      <div className="mt-4 pt-3 border-t border-[#e6ddcb]">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500 uppercase tracking-wide">{t("totalPnl")}</span>
-                          <span className={`text-lg font-semibold ${totalPnl >= 0 ? "text-green-600" : "text-red-500"}`}>
-                            {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
-                          </span>
                         </div>
                       </div>
                     </>

@@ -257,7 +257,7 @@ export default function MarketChartRecharts({
     }
 
     return {
-      lines: [{ id: market?.id, label: "Yes", color: COLORS[0], prob }],
+      lines: [{ id: market?.id, label: opt?.title || "Yes", color: COLORS[0], prob }],
       points
     }
   }, [allData, interval, market, sortedMarkets, isMulti])

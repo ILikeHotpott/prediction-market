@@ -42,10 +42,13 @@ export default function MarketDetail({ params }) {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
+  const eventGroupRule = String(eventData?.group_rule || "").toLowerCase()
+  const isMatchEvent = eventGroupRule === "match"
+  const isStandaloneEvent = eventGroupRule === "standalone"
+
   const isMultiEvent = useMemo(() => {
-    const rule = (eventData?.group_rule || "").toLowerCase()
-    return rule === "exclusive" || rule === "independent"
-  }, [eventData])
+    return eventGroupRule === "exclusive" || eventGroupRule === "independent"
+  }, [eventGroupRule])
 
   const visibleMarkets = useMemo(() => {
     const markets = eventData?.markets || []
@@ -79,13 +82,6 @@ export default function MarketDetail({ params }) {
   const optionsSorted = useMemo(() => {
     return (selectedMarket?.options || []).slice().sort((a, b) => (a.option_index ?? 0) - (b.option_index ?? 0))
   }, [selectedMarket])
-
-  const isBinary = useMemo(() => {
-    if (!optionsSorted.length) return false
-    if (selectedMarket?.is_binary) return true
-    if (optionsSorted.length === 2) return true
-    return false
-  }, [optionsSorted, selectedMarket])
 
   useEffect(() => {
     let active = true
@@ -267,9 +263,15 @@ export default function MarketDetail({ params }) {
     return optionsSorted.find((o) => normalizeId(o.id) !== yesId) || null
   }, [optionsSorted, yesOption])
 
+  const useYesNoUI = useMemo(() => {
+    if (isMatchEvent) return false
+    if (!yesOption || !noOption) return false
+    return optionsSorted.length === 2
+  }, [isMatchEvent, yesOption, noOption, optionsSorted])
+
   // Keep selected option aligned with chosen action (yes/no) so orders use correct leg
   useEffect(() => {
-    if (!optionsSorted.length) return
+    if (!useYesNoUI) return
     if (outcomeAction === "no") {
       const target = noOption || optionsSorted[1] || optionsSorted[0]
       if (target && normalizeId(selectedOptionId) !== normalizeId(target.id)) {
@@ -281,12 +283,21 @@ export default function MarketDetail({ params }) {
         setSelectedOptionId(normalizeId(target.id))
       }
     }
-  }, [optionsSorted, yesOption, noOption, selectedOptionId])
+  }, [useYesNoUI, outcomeAction, optionsSorted, yesOption, noOption, selectedOptionId])
 
   const selectOption = (opt, action = outcomeAction) => {
     if (!opt) return
     setSelectedOptionId(normalizeId(opt.id))
-    setOutcomeAction(action)
+    if (useYesNoUI) {
+      setOutcomeAction(action)
+      return
+    }
+    const sideValue = (opt.side || "").toLowerCase()
+    if (sideValue === "no") {
+      setOutcomeAction("no")
+    } else if (sideValue === "yes") {
+      setOutcomeAction("yes")
+    }
   }
 
   const selectMarket = (marketObj, action = "yes") => {
@@ -321,11 +332,12 @@ export default function MarketDetail({ params }) {
   }, [selectedOption])
 
   const actionPrice = useMemo(() => {
+    if (!useYesNoUI) return selectedPrice
     if (outcomeAction === "no") {
       return noPrice != null ? noPrice : selectedPrice
     }
     return yesPrice != null ? yesPrice : selectedPrice
-  }, [outcomeAction, yesPrice, noPrice, selectedPrice])
+  }, [useYesNoUI, outcomeAction, yesPrice, noPrice, selectedPrice])
 
   const amountNum = useMemo(() => {
     const val = Number(amount)
@@ -543,19 +555,57 @@ export default function MarketDetail({ params }) {
     const cents = price * 100
     return cents.toFixed(1)
   }
+  const withHexAlpha = (hex, alpha) => {
+    if (typeof hex !== "string") return hex
+    if (!hex.startsWith("#")) return hex
+    if (hex.length === 4) {
+      const r = hex[1]
+      const g = hex[2]
+      const b = hex[3]
+      return `#${r}${r}${g}${g}${b}${b}${alpha}`
+    }
+    if (hex.length === 7) return `${hex}${alpha}`
+    return hex
+  }
+  const matchTeamAColor = eventData?.team_a_color || selectedMarket?.team_a_color || "#2f855a"
+  const matchTeamBColor = eventData?.team_b_color || selectedMarket?.team_b_color || "#b91c1c"
+  const getMatchOptionColor = (opt) => {
+    const sideValue = (opt?.side || "").toLowerCase()
+    if (sideValue === "yes") return matchTeamAColor
+    if (sideValue === "no") return matchTeamBColor
+    return "#64748b"
+  }
+  const getOptionLabel = (opt) => {
+    if (!opt) return "Option"
+    if (isMatchEvent) {
+      const sideValue = (opt?.side || "").toLowerCase()
+      if (sideValue === "yes") return eventData?.team_a_name || opt?.title || "Team A"
+      if (sideValue === "no") return eventData?.team_b_name || opt?.title || "Team B"
+      return opt?.title || "Draw"
+    }
+    return opt?.title || opt?.name || "Option"
+  }
+  const formatOptionPriceLabel = (opt) => {
+    if (opt?.probability_bps == null) return "—"
+    return `${formatCents(opt.probability_bps / 10000)}¢`
+  }
   const yesPriceCents = formatCents(yesPrice)
   const noPriceCents = formatCents(noPrice)
   const selectedYesPriceCents = yesPriceCents
   const selectedNoPriceCents = noPriceCents
   const displayYesPrice = selectedYesPriceCents != null ? `${selectedYesPriceCents}¢` : "—"
   const displayNoPrice = selectedNoPriceCents != null ? `${selectedNoPriceCents}¢` : "—"
+  const selectedOptionLabel = getOptionLabel(selectedOption)
   const selectedLabel =
     selectedMarket?.bucket_label ||
     selectedMarket?.title ||
-    selectedOption?.title ||
-    "Option"
-  const actionLabel = outcomeAction === "no" ? "No" : "Yes"
-  const isStandaloneEvent = (eventData?.group_rule || "").toLowerCase() === "standalone"
+    eventData?.title ||
+    "Market"
+  const actionLabel = useYesNoUI ? (outcomeAction === "no" ? "No" : "Yes") : selectedOptionLabel
+  const submitLabel = `${side === "buy" ? "Buy" : "Sell"} ${actionLabel}${useYesNoUI ? ` ${selectedLabel}` : ""}`
+  const mobileSubmitLabel = useYesNoUI
+    ? `${side === "buy" ? "Buy" : "Sell"} ${outcomeAction === "yes" ? "Yes" : "No"}`
+    : `${side === "buy" ? "Buy" : "Sell"} ${selectedOptionLabel}`
   const hideOutcomes = isStandaloneEvent
 
   // Ref for left scrollable area
@@ -579,14 +629,18 @@ export default function MarketDetail({ params }) {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const openMobileSheet = (action) => {
-    setOutcomeAction(action)
-    if (action === "yes") {
-      const target = yesOption || optionsSorted[0]
-      if (target) setSelectedOptionId(normalizeId(target.id))
-    } else {
-      const target = noOption || optionsSorted[1] || optionsSorted[0]
-      if (target) setSelectedOptionId(normalizeId(target.id))
+  const openMobileSheet = (actionOrOption) => {
+    if (typeof actionOrOption === "string") {
+      if (useYesNoUI) setOutcomeAction(actionOrOption)
+      if (actionOrOption === "yes") {
+        const target = yesOption || optionsSorted[0]
+        if (target) setSelectedOptionId(normalizeId(target.id))
+      } else {
+        const target = noOption || optionsSorted[1] || optionsSorted[0]
+        if (target) setSelectedOptionId(normalizeId(target.id))
+      }
+    } else if (actionOrOption) {
+      selectOption(actionOrOption)
     }
     setMobileSheetOpen(true)
   }
@@ -663,21 +717,41 @@ export default function MarketDetail({ params }) {
                 <Comments marketId={selectedMarket?.id} user={user} openAuthModal={openAuthModal} />
               </div>
 
-              {/* Fixed Bottom Buttons for Standalone Markets */}
-              {isStandaloneEvent && (
+              {/* Fixed Bottom Buttons for Standalone/Match Markets */}
+              {(isStandaloneEvent || isMatchEvent) && (
                 <div className="fixed bottom-16 left-0 right-0 bg-[#446f55] p-3 flex gap-2 z-30 border-t border-white/10">
-                  <button
-                    onClick={() => openMobileSheet("yes")}
-                    className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-base transition-colors rounded-lg"
-                  >
-                    Buy Yes {displayYesPrice}
-                  </button>
-                  <button
-                    onClick={() => openMobileSheet("no")}
-                    className="flex-1 py-4 bg-[#B11E1B] hover:bg-[#9a1916] text-white font-semibold text-base transition-colors rounded-lg"
-                  >
-                    Buy No {displayNoPrice}
-                  </button>
+                  {useYesNoUI ? (
+                    <>
+                      <button
+                        onClick={() => openMobileSheet("yes")}
+                        className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-base transition-colors rounded-lg"
+                      >
+                        Buy Yes {displayYesPrice}
+                      </button>
+                      <button
+                        onClick={() => openMobileSheet("no")}
+                        className="flex-1 py-4 bg-[#B11E1B] hover:bg-[#9a1916] text-white font-semibold text-base transition-colors rounded-lg"
+                      >
+                        Buy No {displayNoPrice}
+                      </button>
+                    </>
+                  ) : (
+                    optionsSorted.map((opt) => {
+                      const optionLabel = getOptionLabel(opt)
+                      const optionPrice = formatOptionPriceLabel(opt)
+                      const optionColor = isMatchEvent ? getMatchOptionColor(opt) : "#4b6ea9"
+                      return (
+                        <button
+                          key={normalizeId(opt?.id) || optionLabel}
+                          onClick={() => openMobileSheet(opt)}
+                          className="flex-1 py-4 text-white font-semibold text-base transition-colors rounded-lg hover:opacity-90"
+                          style={{ backgroundColor: optionColor }}
+                        >
+                          Buy {optionLabel} {optionPrice}
+                        </button>
+                      )
+                    })
+                  )}
                 </div>
               )}
             </div>
@@ -737,56 +811,103 @@ export default function MarketDetail({ params }) {
                 </div>
 
                 {/* Options */}
-                <div className="grid grid-cols-2 gap-2 mt-4">
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => {
-                        const target = yesOption || selectedOption || optionsSorted[0]
-                        selectOption(target, "yes")
-                      }}
-                      className={`h-14 rounded-xl text-xl font-semibold transition-all ${
-                        outcomeAction === "yes"
-                          ? "bg-emerald-700 text-white shadow-sm"
-                          : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                      }`}
-                    >
-                      Yes {displayYesPrice}
-                    </button>
-                    {side === "sell" && yesOption && userSharesForOption(yesOption) > 0 && (
-                      <div
-                        className={`text-center text-xs ${
-                          outcomeAction === "yes" ? "text-emerald-700" : "text-slate-600"
+                {useYesNoUI ? (
+                  <div className="grid grid-cols-2 gap-2 mt-4">
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => {
+                          const target = yesOption || selectedOption || optionsSorted[0]
+                          selectOption(target, "yes")
+                        }}
+                        className={`h-14 rounded-xl text-xl font-semibold transition-all ${
+                          outcomeAction === "yes"
+                            ? "bg-emerald-700 text-white shadow-sm"
+                            : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
                         }`}
                       >
-                        {formattedSharesLabel(yesOption)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => {
-                        const target = noOption || selectedOption || optionsSorted[1] || optionsSorted[0]
-                        selectOption(target, "no")
-                      }}
-                      className={`h-14 rounded-xl text-xl font-semibold transition-all ${
-                        outcomeAction === "no"
-                          ? "bg-red-700 text-white shadow-sm"
-                          : "bg-red-100 text-red-800 hover:bg-red-200"
-                      }`}
-                    >
-                      No {displayNoPrice}
-                    </button>
-                    {side === "sell" && noOption && userSharesForOption(noOption) > 0 && (
-                      <div
-                        className={`text-center text-xs ${
-                          outcomeAction === "no" ? "text-red-700" : "text-slate-600"
+                        Yes {displayYesPrice}
+                      </button>
+                      {side === "sell" && yesOption && userSharesForOption(yesOption) > 0 && (
+                        <div
+                          className={`text-center text-xs ${
+                            outcomeAction === "yes" ? "text-emerald-700" : "text-slate-600"
+                          }`}
+                        >
+                          {formattedSharesLabel(yesOption)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => {
+                          const target = noOption || selectedOption || optionsSorted[1] || optionsSorted[0]
+                          selectOption(target, "no")
+                        }}
+                        className={`h-14 rounded-xl text-xl font-semibold transition-all ${
+                          outcomeAction === "no"
+                            ? "bg-red-700 text-white shadow-sm"
+                            : "bg-red-100 text-red-800 hover:bg-red-200"
                         }`}
                       >
-                        {formattedSharesLabel(noOption)}
-                      </div>
-                    )}
+                        No {displayNoPrice}
+                      </button>
+                      {side === "sell" && noOption && userSharesForOption(noOption) > 0 && (
+                        <div
+                          className={`text-center text-xs ${
+                            outcomeAction === "no" ? "text-red-700" : "text-slate-600"
+                          }`}
+                        >
+                          {formattedSharesLabel(noOption)}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div
+                    className={`grid gap-2 mt-4 ${
+                      optionsSorted.length > 2 ? "grid-cols-3" : "grid-cols-2"
+                    }`}
+                  >
+                    {optionsSorted.map((opt) => {
+                      const optionId = normalizeId(opt?.id)
+                      const optionLabel = getOptionLabel(opt)
+                      const optionPrice = formatOptionPriceLabel(opt)
+                      const optionColor = isMatchEvent ? getMatchOptionColor(opt) : "#4b6ea9"
+                      const isSelected = optionId && optionId === normalizedSelectedId
+                      const style = optionColor
+                        ? isSelected
+                          ? { backgroundColor: optionColor, borderColor: optionColor, color: "#fff" }
+                          : {
+                              backgroundColor: withHexAlpha(optionColor, "1a"),
+                              borderColor: withHexAlpha(optionColor, "55"),
+                              color: optionColor,
+                            }
+                        : undefined
+
+                      return (
+                        <div key={optionId || optionLabel} className="flex flex-col gap-1">
+                          <button
+                            onClick={() => selectOption(opt)}
+                            className="h-14 rounded-xl border text-sm font-semibold transition-all flex flex-col items-center justify-center gap-0.5 leading-tight hover:opacity-90"
+                            style={style}
+                          >
+                            <span className="line-clamp-1">{optionLabel}</span>
+                            <span className="text-xs font-medium opacity-80">{optionPrice}</span>
+                          </button>
+                          {side === "sell" && userSharesForOption(opt) > 0 && (
+                            <div
+                              className={`text-center text-xs ${
+                                isSelected ? "text-slate-700" : "text-slate-600"
+                              }`}
+                            >
+                              {formattedSharesLabel(opt)}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
 
                 {/* Amount */}
                 <div className="mt-4 space-y-2">
@@ -908,7 +1029,7 @@ export default function MarketDetail({ params }) {
                   disabled={placing}
                   className="w-full mt-4 py-3 text-white text-lg font-semibold rounded-xl transition-colors shadow-sm bg-[#4b6ea9] hover:bg-[#3f5e9c] disabled:bg-[#c9d4ea] disabled:text-[#3f5e9c] disabled:cursor-not-allowed"
                 >
-                  {placing ? "Submitting..." : `${side === "buy" ? "Buy" : "Sell"} ${actionLabel} ${selectedLabel}`}
+                  {placing ? "Submitting..." : submitLabel}
                 </button>
               </div>
 
@@ -977,8 +1098,13 @@ export default function MarketDetail({ params }) {
             <div className="mb-4">
               <div className="flex items-center gap-2 text-sm mb-2">
                 <span className="text-gray-400">Outcome</span>
-                <span className={`font-semibold ${outcomeAction === "yes" ? "text-emerald-400" : "text-red-400"}`}>
-                  {outcomeAction === "yes" ? "Yes" : "No"}
+                <span
+                  className={`font-semibold ${
+                    useYesNoUI ? (outcomeAction === "yes" ? "text-emerald-400" : "text-red-400") : "text-white"
+                  }`}
+                  style={!useYesNoUI && selectedOption ? { color: getMatchOptionColor(selectedOption) } : undefined}
+                >
+                  {useYesNoUI ? (outcomeAction === "yes" ? "Yes" : "No") : selectedOptionLabel}
                 </span>
               </div>
               <div className="text-gray-400 text-xs">
@@ -1058,10 +1184,15 @@ export default function MarketDetail({ params }) {
               onClick={handlePlaceOrder}
               disabled={placing}
               className={`w-full py-4 disabled:bg-gray-600 text-white font-semibold rounded-xl text-lg transition-colors ${
-                outcomeAction === "yes" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-[#B11E1B] hover:bg-[#9a1916]"
+                useYesNoUI
+                  ? outcomeAction === "yes"
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-[#B11E1B] hover:bg-[#9a1916]"
+                  : "hover:opacity-90"
               }`}
+              style={!useYesNoUI && selectedOption ? { backgroundColor: getMatchOptionColor(selectedOption) } : undefined}
             >
-              {placing ? "Submitting..." : `Buy ${outcomeAction === "yes" ? "Yes" : "No"}`}
+              {placing ? "Submitting..." : mobileSubmitLabel}
             </button>
 
             {/* Terms */}
