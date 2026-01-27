@@ -12,3 +12,5 @@ django-redis
 redis
 openai==1.65.0
 stripe==9.8.0
+websockets==12.0
+pandas-market-calendars==4.4.0

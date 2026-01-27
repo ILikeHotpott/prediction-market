@@ -266,24 +266,24 @@ export default function MarketChartRecharts({
 
   if (loading) {
     return (
-      <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
-        <div className="h-8 w-64 bg-[#e6ddcb] rounded animate-pulse mb-2" />
-        <div className="h-12 w-24 bg-[#e6ddcb] rounded animate-pulse mb-4" />
-        <div className="h-[300px] bg-[#e6ddcb]/50 rounded animate-pulse" />
+      <div className="bg-background rounded-2xl p-6">
+        <div className="h-8 w-64 bg-white/10 rounded animate-pulse mb-2" />
+        <div className="h-12 w-24 bg-white/10 rounded animate-pulse mb-4" />
+        <div className="h-[300px] bg-white/5 rounded animate-pulse" />
       </div>
     )
   }
 
   return (
-    <div className="bg-[#446f55] lg:bg-[#f9f6ee] lg:rounded-2xl lg:border lg:border-[#e6ddcb] lg:mt-6 overflow-hidden">
+    <div className="bg-background lg:rounded-2xl lg:mt-4 overflow-hidden">
       <div className={`px-4 lg:px-6 transition-all duration-300 lg:pt-5 lg:pb-4 ${scrolled ? 'pt-3 pb-2' : 'pt-5 pb-4'}`}>
         <div className={`flex items-center mb-2 transition-all duration-300 lg:gap-3 ${scrolled ? 'gap-2' : 'gap-3'}`}>
           {coverUrl && <img src={coverUrl} alt="" className={`rounded-lg object-cover transition-all duration-300 lg:w-12 lg:h-12 ${scrolled ? 'w-8 h-8' : 'w-12 h-12'}`} />}
-          <h2 className={`font-bold text-white lg:text-slate-900 lg:text-xl transition-all duration-300 ${scrolled ? 'text-base' : 'text-xl'}`}>{eventTitle || market?.title}</h2>
+          <h2 className={`font-bold text-white lg:text-xl transition-all duration-300 ${scrolled ? 'text-base' : 'text-xl'}`}>{eventTitle || market?.title}</h2>
         </div>
         <div className="flex items-baseline gap-3">
-          <span className="text-4xl font-bold text-white lg:text-slate-900">{prob != null ? `${prob.toFixed(0)}%` : "—"}</span>
-          <span className="text-lg text-gray-400 lg:text-slate-600">chance</span>
+          <span className="text-4xl font-bold text-white">{prob != null ? `${prob.toFixed(0)}%` : "—"}</span>
+          <span className="text-lg text-white/60">chance</span>
         </div>
       </div>
 
@@ -292,8 +292,8 @@ export default function MarketChartRecharts({
           {chartData.lines.map(line => (
             <button key={line.id} onClick={() => onSelectMarket?.(visibleMarkets.find(m => m.id === line.id))} className="flex items-center gap-2 hover:opacity-80">
               <span className="w-3 h-3 rounded-full" style={{ backgroundColor: line.color }} />
-              <span className="text-gray-300 lg:text-slate-700">{line.label}</span>
-              {line.prob != null && <span className="text-gray-500 lg:text-slate-500">({line.prob.toFixed(0)}%)</span>}
+              <span className="text-white/70">{line.label}</span>
+              {line.prob != null && <span className="text-white/50">({line.prob.toFixed(0)}%)</span>}
             </button>
           ))}
         </div>
@@ -307,13 +307,14 @@ export default function MarketChartRecharts({
               type="number"
               domain={['dataMin', 'dataMax']}
               scale="time"
-              stroke="#94a3b8"
+              stroke="rgba(255,255,255,0.45)"
               tickFormatter={(t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             />
             <YAxis
-              stroke="#94a3b8"
+              stroke="rgba(255,255,255,0.45)"
               domain={['dataMin - 5', 'dataMax + 5']}
               tickFormatter={(v) => `${v.toFixed(0)}%`}
+              orientation="right"
             />
             <Tooltip
               contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e6ddcb', borderRadius: '8px' }}
@@ -332,14 +333,14 @@ export default function MarketChartRecharts({
         </ResponsiveContainer>
       </div>
 
-      <div className="px-4 lg:px-6 py-4 flex gap-2 border-t border-gray-700 lg:border-[#e6ddcb]">
+      <div className="px-4 lg:px-6 py-4 flex gap-2 border-t border-white/10">
         {INTERVALS.map(int => (
           <button
             key={int}
             onClick={() => setInterval(int)}
             onMouseEnter={() => fetchData(marketIds, int)}
             className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-              interval === int ? "bg-[#4b6ea9] text-white" : "text-gray-400 lg:text-slate-600 hover:text-white lg:hover:text-slate-900 hover:bg-gray-700 lg:hover:bg-[#e6ddcb]"
+              interval === int ? "bg-[#4b6ea9] text-white" : "text-white/60 hover:text-white hover:bg-white/10"
             }`}
           >
             {int}
@@ -390,7 +391,7 @@ export default function MarketChartRecharts({
 
           {/* Desktop: Table layout */}
           <div className="hidden lg:block">
-            <div className="flex items-center justify-between mb-4 text-sm font-semibold text-slate-600 uppercase">
+            <div className="flex items-center justify-between mb-4 text-sm font-semibold text-white uppercase">
               <span>OUTCOME</span>
               <span>CHANCE</span>
             </div>
@@ -409,10 +410,10 @@ export default function MarketChartRecharts({
                   <div key={m.id} className="flex items-center justify-between py-3">
                     <div className="flex items-center gap-3 flex-1">
                       {i < COLORS.length && <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i] }} />}
-                      <span className="text-slate-900 font-medium">{m.bucket_label || m.title}</span>
+                      <span className="text-white font-medium">{m.bucket_label || m.title}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-slate-900 font-bold text-lg w-16 text-right">{pDisp}%</span>
+                      <span className="text-white font-bold text-lg w-16 text-right">{pDisp}%</span>
                       <button
                         onClick={() => onSelectMarket?.(m, "yes")}
                         className={`px-4 py-2 text-sm font-semibold rounded-xl transition-colors ${

@@ -1,7 +1,7 @@
 from django.urls import path
 from django.http import JsonResponse
 
-from .views import admin, amm, comments, events, market, orders, redemption, search, series, stripe_payments, tags, translations, upload, users, watchlist
+from .views import admin, amm, comments, events, finance, market, orders, redemption, search, series, stripe_payments, tags, translations, upload, users, watchlist
 
 
 def health_check(request):
@@ -51,6 +51,7 @@ urlpatterns = [
     path("api/markets/create/", market.create_market, name="market-create"),
     path("api/markets/series/", series.get_series, name="market-series"),
     path("api/markets/series/delta/", series.get_series_delta, name="market-series-delta"),  # A2: incremental fetch
+    path("api/finance/series/", finance.finance_series, name="finance-series"),
     path("api/markets/<uuid:market_id>/", market.get_market, name="market-detail"),
     path(
         "api/markets/<uuid:market_id>/publish/",

@@ -144,11 +144,11 @@ export default function Comments({ marketId, user, openAuthModal }) {
   )
 
   return (
-    <Card className="text-slate-900 shadow-none border-0 lg:shadow-md lg:border lg:border-[#e6ddcb] bg-[#446f55] lg:bg-[#f9f6ee] rounded-none lg:rounded-2xl">
+    <Card className="text-white shadow-none border-0 bg-background rounded-none lg:rounded-2xl">
       <CardHeader className="pb-4 px-4 lg:px-6">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-xl font-semibold text-white lg:text-slate-900">{t("title")}</CardTitle>
-          <span className="rounded-full bg-gray-700 lg:bg-white px-3 py-1 text-sm text-white lg:text-slate-800 border-0 lg:border lg:border-[#e6ddcb]">
+          <CardTitle className="text-xl font-semibold text-white">{t("title")}</CardTitle>
+          <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-white border border-white/10">
             {totalCount.toLocaleString()}
           </span>
         </div>
@@ -167,11 +167,11 @@ export default function Comments({ marketId, user, openAuthModal }) {
         </div>
 
         {/* Desktop Tabs */}
-        <div className="hidden lg:flex items-center gap-2 text-sm text-slate-700 mt-2">
-          <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
+        <div className="hidden lg:flex items-center gap-2 text-sm text-white/70 mt-2">
+          <Button variant="ghost" size="sm" className="h-9 px-3 text-white/70 hover:text-white">
             {t("topHolders")}
           </Button>
-          <Button variant="ghost" size="sm" className="h-9 px-3 text-slate-700 hover:text-slate-900">
+          <Button variant="ghost" size="sm" className="h-9 px-3 text-white/70 hover:text-white">
             {t("activity")}
           </Button>
         </div>
@@ -184,7 +184,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
             value={drafts.root || ""}
             onChange={(e) => updateDraft("root", e.target.value)}
             placeholder={user ? t("placeholder") : t("placeholderSignIn")}
-            className="w-full bg-[#3a5f4a] lg:bg-white border-0 lg:border lg:border-[#e6ddcb] text-white lg:text-slate-900 placeholder:text-gray-400 lg:placeholder:text-slate-500 px-4 py-3 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 lg:focus:ring-[#4b6ea9]/60 resize-none"
+            className="w-full bg-[#3a5f4a] border border-white/10 text-white placeholder:text-white/50 px-4 py-3 rounded-lg lg:rounded-xl focus:outline-none focus:ring-2 focus:ring-[#f2c35b]/60 resize-none"
             disabled={!user}
           />
           <div className="flex justify-end items-center pt-3">
@@ -200,7 +200,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
         </div>
 
         {/* Warning Banner - Mobile */}
-        <div className="lg:hidden bg-[#3a5f4a] text-gray-300 rounded-lg p-3 flex items-center gap-2 text-sm">
+        <div className="lg:hidden bg-[#3a5f4a] text-white/70 rounded-lg p-3 flex items-center gap-2 text-sm">
           <span className="text-lg">🛡️</span>
           <span>Beware of external links.</span>
         </div>
@@ -208,7 +208,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
         <div className="flex flex-wrap items-center gap-3">
           <button
             className={`px-4 py-2 text-sm rounded-full font-medium transition-colors ${
-              !holdersOnly ? "bg-gray-700 text-white" : "bg-transparent text-gray-400 border border-gray-700"
+              !holdersOnly ? "bg-white/10 text-white" : "bg-transparent text-white/60 border border-white/10"
             }`}
             onClick={() => setHoldersOnly(false)}
             type="button"
@@ -222,7 +222,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
               onChange={(e) => setHoldersOnly(e.target.checked)}
               className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500"
             />
-            <span className="text-gray-300 lg:text-slate-700">Holders</span>
+            <span className="text-white/70">Holders</span>
           </label>
         </div>
 
@@ -230,7 +230,7 @@ export default function Comments({ marketId, user, openAuthModal }) {
         {loading && comments.length === 0 ? (
           renderSkeletons()
         ) : filteredComments.length === 0 ? (
-          <div className="text-gray-400 lg:text-slate-700">{t("noComments")}</div>
+          <div className="text-white/60">{t("noComments")}</div>
         ) : (
           <div className="space-y-3">
             {filteredComments.map((comment) => (
@@ -298,7 +298,7 @@ function CommentItem({
     : []
 
   return (
-    <div className="group relative p-4 rounded-none lg:rounded-xl transition-colors bg-[#3a5f4a] lg:bg-white border-0 lg:border lg:border-[#e6ddcb]">
+    <div className="group relative p-4 rounded-none lg:rounded-xl transition-colors bg-[#3a5f4a] border border-white/10">
       <div className="flex gap-3">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm flex-shrink-0 overflow-hidden">
           {avatarUrl ? (
@@ -317,7 +317,7 @@ function CommentItem({
         </div>
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-white lg:text-slate-900 font-medium">{comment.user?.display_name || "User"}</span>
+            <span className="text-white font-medium">{comment.user?.display_name || "User"}</span>
             {primaryHolding && (
               <div className="relative">
                 <button
@@ -330,28 +330,28 @@ function CommentItem({
                   {hasMultipleHoldings && (showHoldings ? <ChevronUp size={14} /> : <ChevronDown size={14} />)}
                 </button>
                 {hasMultipleHoldings && showHoldings && (
-                  <div className="absolute z-10 mt-2 w-64 rounded-lg shadow-lg p-3 space-y-2 border border-gray-700 lg:border-[#e6ddcb] bg-[#3a5f4a] lg:bg-white">
+                  <div className="absolute z-10 mt-2 w-64 rounded-lg shadow-lg p-3 space-y-2 border border-white/10 bg-[#3a5f4a]">
                     {comment.holdings.map((h, idx) => (
-                      <div key={`${h.option_id}-${idx}`} className="text-xs text-white lg:text-slate-900 flex justify-between">
-                        <span className="text-gray-300 lg:text-slate-800">{h.option_title || "Position"}</span>
-                        <span className="text-white lg:text-slate-900 font-semibold">{formatAmount(h.cost_basis)}</span>
+                      <div key={`${h.option_id}-${idx}`} className="text-xs text-white flex justify-between">
+                        <span className="text-white/70">{h.option_title || "Position"}</span>
+                        <span className="text-white font-semibold">{formatAmount(h.cost_basis)}</span>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
             )}
-            <span className="text-gray-400 lg:text-slate-600 text-xs">• {formatTimeAgo(comment.created_at)}</span>
+            <span className="text-white/60 text-xs">• {formatTimeAgo(comment.created_at)}</span>
           </div>
-          <p className="text-gray-200 lg:text-slate-900 mt-2 leading-relaxed">
-            {parentUserName ? <span className="text-blue-400 lg:text-[#3f5e9c] mr-2">@{parentUserName}</span> : null}
+          <p className="text-white/90 mt-2 leading-relaxed">
+            {parentUserName ? <span className="text-blue-300 mr-2">@{parentUserName}</span> : null}
             {comment.content}
           </p>
-          <div className="flex items-center gap-2 mt-3 text-gray-400 lg:text-slate-700">
+          <div className="flex items-center gap-2 mt-3 text-white/60">
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 gap-1 text-gray-400 lg:text-slate-700 hover:text-white lg:hover:text-slate-900"
+              className="h-8 gap-1 text-white/60 hover:text-white"
               type="button"
             >
               <Heart className="w-4 h-4" />
@@ -361,7 +361,7 @@ function CommentItem({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1 text-gray-400 lg:text-slate-700 hover:text-white lg:hover:text-slate-900"
+                className="h-8 gap-1 text-white/60 hover:text-white"
                 onClick={() => {
                   setReplyTarget(draftKey)
                   updateDraft(draftKey, replyDraft || "")
@@ -381,7 +381,7 @@ function CommentItem({
                 value={replyDraft}
                 onChange={(e) => updateDraft(draftKey, e.target.value)}
                 placeholder="Reply to this comment..."
-                className="bg-[#3a5f4a] lg:bg-white text-white lg:text-slate-900 placeholder:text-gray-400 lg:placeholder:text-slate-500 border-0 lg:border lg:border-[#e6ddcb] rounded-xl focus-visible:ring-blue-500 lg:focus-visible:ring-[#4b6ea9]/60"
+                className="bg-[#3a5f4a] text-white placeholder:text-white/50 border border-white/10 rounded-xl focus-visible:ring-[#f2c35b]/60"
               />
               <div className="flex justify-end">
                 <Button
@@ -433,4 +433,3 @@ function formatTimeAgo(isoDate) {
   const days = Math.floor(hours / 24)
   return `${days}d ago`
 }
-

@@ -3,8 +3,10 @@ import asyncio
 from datetime import timedelta
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
+from django.core.cache import cache
 from django.utils import timezone
 
+from .services.finance import ensure_inline_services_started
 INTERVAL_HOURS = {
     "1M": 1/60,
     "1H": 1,
@@ -151,4 +153,67 @@ class SeriesConsumer(AsyncWebsocketConsumer):
         await self.send(json.dumps({
             "type": "series",
             "data": event["data"],
+        }))
+
+
+class FinancePriceConsumer(AsyncWebsocketConsumer):
+    """WebSocket consumer for streaming realtime finance prices."""
+
+    async def connect(self):
+        self.group_name = None
+        ensure_inline_services_started()
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        if self.group_name:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def receive(self, text_data):
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            await self.send(json.dumps({"error": "Invalid JSON"}))
+            return
+
+        action = data.get("action")
+        if action == "subscribe":
+            symbol = str(data.get("symbol") or "").upper()
+            if not symbol:
+                await self.send(json.dumps({"error": "symbol is required"}))
+                return
+            if self.group_name:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            self.group_name = f"finance_price_{symbol}"
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+
+            snapshot = cache.get(f"finance_price:{symbol}")
+            if snapshot:
+                await self.send(json.dumps({
+                    "type": "price",
+                    "symbol": symbol,
+                    "price": snapshot.get("price"),
+                    "ts": snapshot.get("ts"),
+                }))
+            history = cache.get(f"finance_series:{symbol}") or []
+            if history:
+                await self.send(json.dumps({
+                    "type": "history",
+                    "symbol": symbol,
+                    "points": history,
+                }))
+            return
+
+        if action == "unsubscribe" and self.group_name:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            self.group_name = None
+            return
+
+        await self.send(json.dumps({"error": "Unsupported action"}))
+
+    async def finance_price(self, event):
+        await self.send(json.dumps({
+            "type": "price",
+            "symbol": event.get("symbol"),
+            "price": event.get("price"),
+            "ts": event.get("ts"),
         }))

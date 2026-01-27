@@ -1,6 +1,7 @@
 from .amm import AmmPool, AmmPoolOptionState
 from .comments import Comment
 from .events import Event
+from .finance import FinanceMarketWindow
 from .ledger import (
     BalanceSnapshot,
     ChainEvent,
@@ -26,6 +27,7 @@ __all__ = [
     "Event",
     "EventTag",
     "EventTranslation",
+    "FinanceMarketWindow",
     "Market",
     "MarketOption",
     "MarketOptionSeries",
@@ -43,5 +45,4 @@ __all__ = [
     "WalletAccount",
     "Watchlist",
 ]
-
 

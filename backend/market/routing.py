@@ -3,4 +3,5 @@ from . import consumers
 
 websocket_urlpatterns = [
     re_path(r"ws/series/(?P<event_id>[0-9a-f-]+)/$", consumers.SeriesConsumer.as_asgi()),
+    re_path(r"ws/finance/price/$", consumers.FinancePriceConsumer.as_asgi()),
 ]

@@ -96,7 +96,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
         className={`market-card${showStandaloneBinary ? " market-card--standalone" : ""}${isGrouped ? " market-card--grouped" : ""}`}
       >
         {/* 左上角正方形图片 */}
-        {market.image && market.image.startsWith("http") && (
+        {market.image && (market.image.startsWith("http") || market.image.startsWith("/")) && (
           <div className="absolute top-3 left-3 pointer-events-none z-0">
             <img
               src={market.image}
@@ -116,7 +116,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
 
         <div className={`market-card-header ${showStandaloneBinary ? "market-card-header--standalone" : ""}`}>
           <div className="market-card-header-main">
-            {market.image && market.image.startsWith("http") ? (
+            {market.image && (market.image.startsWith("http") || market.image.startsWith("/")) ? (
               <div className="w-12 flex-shrink-0" />
             ) : (
               <div className="market-card-badge flex-shrink-0">

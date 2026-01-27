@@ -91,6 +91,8 @@ def get_event_list_cache_key(
     ids: Optional[str] = None,
     lang: str = "en",
     include_translations: bool = False,
+    finance_interval: Optional[str] = None,
+    finance_asset: Optional[str] = None,
 ) -> str:
     return make_key(
         PREFIX_EVENT_LIST,
@@ -99,6 +101,8 @@ def get_event_list_cache_key(
         lang or "en",
         "translations" if include_translations else "no_translations",
         ids or "",
+        finance_interval or "",
+        finance_asset or "",
     )
 
 
@@ -108,9 +112,19 @@ def get_cached_event_list(
     ids: Optional[str] = None,
     lang: str = "en",
     include_translations: bool = False,
+    finance_interval: Optional[str] = None,
+    finance_asset: Optional[str] = None,
 ) -> Optional[dict]:
     """Get cached event list."""
-    key = get_event_list_cache_key(category, is_admin, ids, lang, include_translations)
+    key = get_event_list_cache_key(
+        category,
+        is_admin,
+        ids,
+        lang,
+        include_translations,
+        finance_interval,
+        finance_asset,
+    )
     return cache.get(key)
 
 
@@ -121,9 +135,19 @@ def set_cached_event_list(
     ids: Optional[str] = None,
     lang: str = "en",
     include_translations: bool = False,
+    finance_interval: Optional[str] = None,
+    finance_asset: Optional[str] = None,
 ) -> None:
     """Cache event list."""
-    key = get_event_list_cache_key(category, is_admin, ids, lang, include_translations)
+    key = get_event_list_cache_key(
+        category,
+        is_admin,
+        ids,
+        lang,
+        include_translations,
+        finance_interval,
+        finance_asset,
+    )
     ttl = _get_ttl("event_list", 60)
     cache.set(key, data, ttl)
 

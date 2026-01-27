@@ -3,9 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import MarketCard from "./MarketCard"
+import FinanceSidebar from "./FinanceSidebar"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useLanguage } from "@/components/LanguageProvider"
+import { FINANCE_ASSET_IMAGE_MAP } from "@/lib/constants/finance"
 
 const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
 const CACHE_KEY_PREFIX = "mf_events_"
@@ -23,12 +25,12 @@ function formatVolume(value) {
 // Global in-memory cache for instant access
 const memoryCache = new Map()
 
-function getCacheKey(category) {
-  return `${CACHE_KEY_PREFIX}${category || "all"}`
+function getCacheKey(category, financeInterval, financeAsset) {
+  return `${CACHE_KEY_PREFIX}${category || "all"}:${financeInterval || ""}:${financeAsset || ""}`
 }
 
-function getCachedEvents(category) {
-  const key = getCacheKey(category)
+function getCachedEvents(category, financeInterval, financeAsset) {
+  const key = getCacheKey(category, financeInterval, financeAsset)
   // Try memory cache first (instant)
   if (memoryCache.has(key)) {
     const { data, timestamp } = memoryCache.get(key)
@@ -46,8 +48,8 @@ function getCachedEvents(category) {
   } catch { return null }
 }
 
-function setCachedEvents(category, data) {
-  const key = getCacheKey(category)
+function setCachedEvents(category, financeInterval, financeAsset, data) {
+  const key = getCacheKey(category, financeInterval, financeAsset)
   const entry = { data, timestamp: Date.now() }
   memoryCache.set(key, entry)
   if (typeof window !== "undefined") {
@@ -59,17 +61,19 @@ function setCachedEvents(category, data) {
 function prefetchAllCategories() {
   const categories = ["", "crypto", "sports", "politics", "entertainment", "science", "business"]
   categories.forEach((cat) => {
-    if (!getCachedEvents(cat)) {
+    if (!getCachedEvents(cat, null, null)) {
       fetchEventsData(cat).then((data) => {
-        if (data) setCachedEvents(cat, data)
+        if (data) setCachedEvents(cat, null, null, data)
       }).catch(() => {})
     }
   })
 }
 
-async function fetchEventsData(category, lang = "en") {
+async function fetchEventsData(category, lang = "en", financeInterval, financeAsset) {
   const url = new URL(`${backendBase}/api/events/`)
   if (category) url.searchParams.set("category", category)
+  if (financeInterval) url.searchParams.set("finance_interval", financeInterval)
+  if (financeAsset) url.searchParams.set("finance_asset", financeAsset)
   if (lang && lang !== "en") url.searchParams.set("lang", lang)
   url.searchParams.set("include_translations", "0")
   try {
@@ -105,10 +109,16 @@ function normalizeEvents(items) {
     const yesOption = standaloneOutcomes.find((o) => String(o.name || "").toLowerCase() === "yes")
     const rawVolume = groupRule === "standalone" ? Number(primaryMarket?.volume_total) || 0 : markets.reduce((sum, m) => sum + (Number(m.volume_total) || 0), 0)
     const totalVolume = formatVolume(rawVolume)
+    const rawImage = evt.cover_url || primaryMarket?.cover_url
+    const normalizedImage =
+      rawImage && rawImage.startsWith("http")
+        ? rawImage
+        : FINANCE_ASSET_IMAGE_MAP[String(rawImage || "").toUpperCase()] || rawImage
+
     return {
       id: evt.id, title: evt.title, description: evt.description, outcomes: multiOutcomes,
       is_binary: primaryMarket?.is_binary || isBinaryYesNo, chance: yesOption ? yesOption.probability : undefined,
-      image: evt.cover_url || primaryMarket?.cover_url || "📈", volume: totalVolume, slug: evt.slug,
+      image: normalizedImage || "📈", volume: totalVolume, slug: evt.slug,
       primary_market_id: primaryMarket?.id, group_rule: groupRule,
       // Match-specific fields
       team_a_name: evt.team_a_name,
@@ -141,13 +151,17 @@ function SkeletonCard() {
 export default function MarketGrid() {
   const searchParams = useSearchParams()
   const category = searchParams.get("category")
+  const financeInterval = searchParams.get("finance_interval")
+  const financeAsset = searchParams.get("finance_asset")
   const { user } = useAuth()
   const { locale } = useLanguage()
+  const isFinance = category === "finance"
+  const resolvedFinanceInterval = isFinance && !financeAsset ? (financeInterval || "15m") : financeInterval
 
   // Try to get cached data immediately for faster initial render
   const [markets, setMarkets] = useState(() => {
     if (typeof window === "undefined") return []
-    return getCachedEvents(category) || []
+    return getCachedEvents(category, resolvedFinanceInterval, financeAsset) || []
   })
   const [watchedIds, setWatchedIds] = useState(new Set())
   const [mounted, setMounted] = useState(false)
@@ -158,9 +172,11 @@ export default function MarketGrid() {
   useEffect(() => {
     setMounted(true)
     // Start fetching immediately with locale
-    fetchEventsData(category, locale).then((data) => {
+    fetchEventsData(category, locale, resolvedFinanceInterval, financeAsset).then((data) => {
       setMarkets(data)
-      if (data.length > 0 && locale === "en") setCachedEvents(category, data)
+      if (data.length > 0 && locale === "en") {
+        setCachedEvents(category, resolvedFinanceInterval, financeAsset, data)
+      }
     }).catch(() => {})
     // Prefetch other categories (only for English)
     if (!hasFetched.current && locale === "en") {
@@ -174,14 +190,16 @@ export default function MarketGrid() {
     if (!mounted) return
     // Only use cache for English
     if (locale === "en") {
-      const cached = getCachedEvents(category)
+      const cached = getCachedEvents(category, resolvedFinanceInterval, financeAsset)
       if (cached) setMarkets(cached)
     }
-    fetchEventsData(category, locale).then((data) => {
+    fetchEventsData(category, locale, resolvedFinanceInterval, financeAsset).then((data) => {
       setMarkets(data)
-      if (data.length > 0 && locale === "en") setCachedEvents(category, data)
+      if (data.length > 0 && locale === "en") {
+        setCachedEvents(category, resolvedFinanceInterval, financeAsset, data)
+      }
     }).catch(() => {})
-  }, [category, locale, mounted])
+  }, [category, locale, mounted, resolvedFinanceInterval, financeAsset])
 
   useEffect(() => {
     if (user) fetchWatchlist()
@@ -235,28 +253,33 @@ export default function MarketGrid() {
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 lg:mt-6 pb-16 relative">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
-        {showSkeleton ? (
-          Array.from({ length: 9 }).map((_, i) => (
-            <SkeletonCard key={`skeleton-${i}`} />
-          ))
-        ) : markets.length === 0 ? (
-          null
-        ) : (
-          markets.map((market) => (
-            <MarketCard
-              key={market.id}
-              market={market}
-              isWatched={watchedIds.has(market.id)}
-              onToggleWatchlist={toggleWatchlist}
-            />
-          ))
-        )}
-      </div>
+      <div className={`flex flex-col ${isFinance ? "md:flex-row md:gap-6" : ""}`}>
+        {isFinance && <FinanceSidebar />}
+        <div className="flex-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
+            {showSkeleton ? (
+              Array.from({ length: 9 }).map((_, i) => (
+                <SkeletonCard key={`skeleton-${i}`} />
+              ))
+            ) : markets.length === 0 ? (
+              null
+            ) : (
+              markets.map((market) => (
+                <MarketCard
+                  key={market.id}
+                  market={market}
+                  isWatched={watchedIds.has(market.id)}
+                  onToggleWatchlist={toggleWatchlist}
+                />
+              ))
+            )}
+          </div>
 
-      {mounted && markets.length === 0 && (
-        <div className="text-center text-muted-foreground py-20 font-display text-xl">No markets available</div>
-      )}
+          {mounted && markets.length === 0 && (
+            <div className="text-center text-muted-foreground py-20 font-display text-xl">No markets available</div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

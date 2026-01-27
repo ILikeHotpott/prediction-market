@@ -35,3 +35,21 @@ The platform consists of two main components:
 - **Backend**: Python, Django, PostgreSQL, Supabase
 - **Frontend**: TypeScript, Next.js 15, React, Tailwind CSS
 - **Infrastructure**: Supabase (Auth + Database)
+
+## Finance Realtime Markets (WebSocket)
+
+This project supports realtime finance prediction markets powered by Binance (crypto) and Finnhub (US stocks).
+
+Required environment variables:
+
+- `FINNHUB_API_KEY` (backend): Finnhub websocket token for US stock trades
+
+Run the realtime service (price streams + auto-create/settle scheduler):
+
+```bash
+python backend/manage.py run_finance_realtime
+```
+
+Notes:
+- The realtime service broadcasts prices to the `/ws/finance/price/` websocket endpoint.
+- Finance market windows are created/settled continuously based on interval schedules.

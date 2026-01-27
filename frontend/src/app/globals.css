@@ -188,6 +188,31 @@ a,
   height: 200px;
 }
 
+.finance-price {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+@keyframes finance-flip {
+  0% { transform: translateY(10px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.finance-price-flip {
+  animation: finance-flip 0.35s ease;
+}
+
+.finance-live-dot {
+  fill: #f2c35b;
+}
+
+.finance-live-pulse {
+  fill: rgba(242, 195, 91, 0.2);
+  opacity: 0.6;
+}
+
+
 .market-card-suit-bg {
   position: absolute;
   top: 65%;

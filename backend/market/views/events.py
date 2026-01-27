@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from ..models import Event, Market, MarketOption, MarketOptionStats, EventTranslation
+from ..models import Event, Market, MarketOption, MarketOptionStats, EventTranslation, FinanceMarketWindow
 from ..services.amm.setup import AmmSetupError, ensure_pool_initialized, normalize_amm_params
 from ..services.auth import get_user_from_request, require_admin
 from ..services.events import binary_options_from_payload
@@ -438,6 +438,12 @@ def list_events(request):
 
     category = request.GET.get("category")
     ids_param = request.GET.get("ids")
+    finance_interval = request.GET.get("finance_interval")
+    finance_asset = request.GET.get("finance_asset")
+    if finance_interval:
+        finance_interval = finance_interval.strip().lower()
+    if finance_asset:
+        finance_asset = finance_asset.strip().upper()
     lang = request.GET.get("lang", "en")
     include_translations = _parse_bool_param(request.GET.get("include_translations"))
     summary = _parse_bool_param(request.GET.get("summary"))
@@ -467,7 +473,15 @@ def list_events(request):
 
     # Try cache first (skip for admin to always show fresh data)
     if not is_admin:
-        cached = get_cached_event_list(category, is_admin, ids_param, lang, include_translations)
+        cached = get_cached_event_list(
+            category,
+            is_admin,
+            ids_param,
+            lang,
+            include_translations,
+            finance_interval,
+            finance_asset,
+        )
         if cached is not None:
             return JsonResponse(cached, status=200)
 
@@ -500,20 +514,48 @@ def list_events(request):
     if category:
         events_qs = events_qs.filter(category__iexact=category)
 
+    finance_event_order = None
+    if category and category.lower() == "finance" and (finance_interval or finance_asset):
+        windows = FinanceMarketWindow.objects.filter(event__is_hidden=False)
+        if finance_interval:
+            windows = windows.filter(interval__iexact=finance_interval)
+        if finance_asset:
+            windows = windows.filter(asset_symbol__iexact=finance_asset)
+        windows = windows.exclude(market__status__in=["resolved", "canceled"]).order_by("window_end")
+        finance_event_order = [str(w["event_id"]) for w in windows.values("event_id")]
+        if finance_event_order:
+            events_qs = events_qs.filter(id__in=finance_event_order)
+        else:
+            events_qs = events_qs.none()
+
     # IDs filter (for watchlist)
     if ids_param:
         id_list = [i.strip() for i in ids_param.split(",") if i.strip()]
         events_qs = events_qs.filter(id__in=id_list)
 
+    events = list(events_qs[:100])
+    if finance_event_order:
+        event_map = {str(e.id): e for e in events}
+        events = [event_map[eid] for eid in finance_event_order if eid in event_map]
+
     items = [
         serialize_event(e, lang, include_all_translations=include_translations)
-        for e in events_qs[:100]
+        for e in events
     ]
     result = {"items": items}
 
     # Cache the result (only for non-admin)
     if not is_admin:
-        set_cached_event_list(category, is_admin, result, ids_param, lang, include_translations)
+        set_cached_event_list(
+            category,
+            is_admin,
+            result,
+            ids_param,
+            lang,
+            include_translations,
+            finance_interval,
+            finance_asset,
+        )
 
     return JsonResponse(result, status=200)
 
@@ -530,6 +572,32 @@ def get_event(request, event_id):
             user = get_user_from_request(request)
             if not (user and user.role == "admin"):
                 return JsonResponse({"error": "Event not available"}, status=404)
+        if cached.get("finance"):
+            cached = dict(cached)
+            cached["server_time"] = timezone.now().isoformat()
+            finance_window = FinanceMarketWindow.objects.filter(event_id=event_id).first()
+            if finance_window:
+                from ..services.finance import FINANCE_ASSETS
+                asset_info = FINANCE_ASSETS.get(finance_window.asset_symbol, {})
+                cached["finance"] = {
+                    **cached.get("finance", {}),
+                    "asset_symbol": finance_window.asset_symbol,
+                    "asset_name": finance_window.asset_name,
+                    "asset_type": finance_window.asset_type,
+                    "interval": finance_window.interval,
+                    "window_start": finance_window.window_start.isoformat(),
+                    "window_end": finance_window.window_end.isoformat(),
+                    "prev_close_price": float(finance_window.prev_close_price)
+                    if finance_window.prev_close_price is not None
+                    else None,
+                    "close_price": float(finance_window.close_price)
+                    if finance_window.close_price is not None
+                    else None,
+                    "price_precision": finance_window.price_precision,
+                    "source": finance_window.source,
+                    "image_url": asset_info.get("image_url") or cached.get("cover_url"),
+                    "next_event_id": cached.get("finance", {}).get("next_event_id"),
+                }
         return JsonResponse(cached, status=200)
 
     try:
@@ -543,6 +611,39 @@ def get_event(request, event_id):
             return JsonResponse({"error": "Event not available"}, status=404)
 
     result = serialize_event(event, lang, include_all_translations=include_translations)
+
+    finance_window = FinanceMarketWindow.objects.filter(event_id=event_id).select_related("market").first()
+    if finance_window:
+        from ..services.finance import FINANCE_ASSETS
+        asset_info = FINANCE_ASSETS.get(finance_window.asset_symbol, {})
+        next_window = (
+            FinanceMarketWindow.objects.filter(
+                asset_symbol=finance_window.asset_symbol,
+                interval=finance_window.interval,
+                window_start=finance_window.window_end,
+            )
+            .values("event_id")
+            .first()
+        )
+        result["finance"] = {
+            "asset_symbol": finance_window.asset_symbol,
+            "asset_name": finance_window.asset_name,
+            "asset_type": finance_window.asset_type,
+            "interval": finance_window.interval,
+            "window_start": finance_window.window_start.isoformat(),
+            "window_end": finance_window.window_end.isoformat(),
+            "prev_close_price": float(finance_window.prev_close_price)
+            if finance_window.prev_close_price is not None
+            else None,
+            "close_price": float(finance_window.close_price)
+            if finance_window.close_price is not None
+            else None,
+            "price_precision": finance_window.price_precision,
+            "source": finance_window.source,
+            "image_url": asset_info.get("image_url") or result.get("cover_url"),
+            "next_event_id": str(next_window["event_id"]) if next_window else None,
+        }
+        result["server_time"] = timezone.now().isoformat()
     # Cache the result
     set_cached_event_detail(str(event_id), result, lang, include_translations)
     return JsonResponse(result, status=200)
