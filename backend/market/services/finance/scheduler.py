@@ -169,6 +169,7 @@ def _create_finance_event_market(
     title = _build_title(asset_name, interval_key)
     description = _build_description(asset_symbol, window_start, window_end)
     image_url = FINANCE_ASSETS.get(asset_symbol, {}).get("image_url")
+    event = None
 
     with transaction.atomic():
         event = Event.objects.create(
@@ -246,6 +247,12 @@ def _create_finance_event_market(
             created_at=now,
             updated_at=now,
         )
+
+    try:
+        from ..translation import translate_event
+        translate_event(event)
+    except Exception as exc:
+        logger.warning("Failed to auto-translate finance event %s: %s", event.id, exc)
 
     invalidate_event_list()
     return window

@@ -5,14 +5,6 @@ import { useLanguage } from "./LanguageProvider";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
-const languageFlags = {
-  en: "🇺🇸",
-  zh: "🇨🇳",
-  es: "🇪🇸",
-  pt: "🇧🇷",
-  ja: "🇯🇵",
-};
-
 export default function LanguageSelector({ onSelect, compact = false, theme = "light" }) {
   const { locale, setLocale, locales } = useLanguage();
   const t = useTranslations("language");
@@ -81,7 +73,6 @@ export default function LanguageSelector({ onSelect, compact = false, theme = "l
             locale === loc ? activeBg : ""
           }`}
         >
-          <span className="w-4 text-center">{languageFlags[loc]}</span>
           <span className="font-medium">{t(loc)}</span>
           {locale === loc && <span className={`ml-auto ${textColor}`}>✓</span>}
         </button>

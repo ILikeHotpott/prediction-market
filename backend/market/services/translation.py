@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from typing import Optional
 from openai import OpenAI
 
@@ -56,6 +57,116 @@ def translate_text(text: str, target_language: str, source_language: str = "en")
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return None
+
+
+_FINANCE_TITLE_PATTERN = re.compile(
+    r"^Will\s+(.+?)\s+go\s+up\s+(.+?)\?$",
+    re.IGNORECASE,
+)
+_FINANCE_DESC_PATTERN = re.compile(
+    r"^Prediction window for (.+?): (.+?) to (.+?) \(UTC\)\.$"
+)
+
+_FINANCE_SUFFIX_TRANSLATIONS = {
+    "zh": {
+        "in the next 15 minutes": "在接下来15分钟内会上涨吗？",
+        "in the next hour": "在接下来1小时内会上涨吗？",
+        "today": "今天会上涨吗？",
+        "this week": "本周会上涨吗？",
+    },
+    "es": {
+        "in the next 15 minutes": "en los próximos 15 minutos",
+        "in the next hour": "en la próxima hora",
+        "today": "hoy",
+        "this week": "esta semana",
+    },
+    "pt": {
+        "in the next 15 minutes": "nos próximos 15 minutos",
+        "in the next hour": "na próxima hora",
+        "today": "hoje",
+        "this week": "esta semana",
+    },
+    "ja": {
+        "in the next 15 minutes": "次の15分で",
+        "in the next hour": "次の1時間で",
+        "today": "今日",
+        "this week": "今週",
+    },
+}
+
+_FINANCE_TITLE_TEMPLATES = {
+    "zh": "{asset}{suffix}",
+    "es": "¿Subirá {asset} {suffix}?",
+    "pt": "{asset} vai subir {suffix}?",
+    "ja": "{suffix}{asset}は上がりますか？",
+}
+
+_FINANCE_DESC_TEMPLATES = {
+    "zh": "预测窗口 {symbol}：{start} 至 {end}（UTC）。",
+    "es": "Ventana de predicción para {symbol}: {start} a {end} (UTC).",
+    "pt": "Janela de previsão para {symbol}: {start} a {end} (UTC).",
+    "ja": "{symbol}の予測ウィンドウ: {start} から {end}（UTC）。",
+}
+
+_FINANCE_ASSET_TRANSLATIONS = {
+    "zh": {
+        "Bitcoin": "比特币",
+        "Ethereum": "以太坊",
+        "Nvidia": "英伟达",
+        "Tesla": "特斯拉",
+        "Apple": "苹果",
+        "Microsoft": "微软",
+        "Google": "谷歌",
+        "Meta": "Meta",
+        "Amazon": "亚马逊",
+    },
+    "ja": {
+        "Bitcoin": "ビットコイン",
+        "Ethereum": "イーサリアム",
+        "Nvidia": "エヌビディア",
+        "Tesla": "テスラ",
+        "Apple": "アップル",
+        "Microsoft": "マイクロソフト",
+        "Google": "グーグル",
+        "Meta": "Meta",
+        "Amazon": "アマゾン",
+    },
+}
+
+
+def get_finance_translation(event, lang: str) -> Optional[dict]:
+    if lang == "en":
+        return None
+    if event.category != "finance":
+        return None
+
+    title_match = _FINANCE_TITLE_PATTERN.match(event.title or "")
+    if not title_match:
+        return None
+
+    asset_name, suffix = title_match.groups()
+    suffix_map = _FINANCE_SUFFIX_TRANSLATIONS.get(lang)
+    template = _FINANCE_TITLE_TEMPLATES.get(lang)
+    if not suffix_map or not template:
+        return None
+
+    suffix_key = suffix.strip().lower()
+    translated_suffix = suffix_map.get(suffix_key)
+    if not translated_suffix:
+        return None
+
+    asset_name_translated = _FINANCE_ASSET_TRANSLATIONS.get(lang, {}).get(asset_name, asset_name)
+    title = template.format(asset=asset_name_translated, suffix=translated_suffix)
+
+    description = None
+    desc_match = _FINANCE_DESC_PATTERN.match(event.description or "")
+    if desc_match:
+        symbol, start, end = desc_match.groups()
+        desc_template = _FINANCE_DESC_TEMPLATES.get(lang)
+        if desc_template:
+            description = desc_template.format(symbol=symbol, start=start, end=end)
+
+    return {"title": title, "description": description}
 
 
 def get_cached_translation(
@@ -135,15 +246,75 @@ def batch_translate(
     return result
 
 
+def _reuse_event_translations_by_title(event):
+    from market.models import EventTranslation
+
+    candidates = (
+        EventTranslation.objects.select_related("event")
+        .filter(event__title=event.title)
+        .exclude(event_id=event.id)
+    )
+    if not candidates:
+        return {}
+
+    reused = {}
+    for trans in candidates:
+        desc_match = bool(
+            trans.description
+            and trans.event
+            and trans.event.description == event.description
+        )
+        existing = reused.get(trans.language)
+        if not existing or (desc_match and not existing["description_match"]):
+            reused[trans.language] = {
+                "title": trans.title,
+                "description": trans.description if desc_match else None,
+                "description_match": desc_match,
+            }
+
+    return {
+        lang: {"title": data["title"], "description": data["description"]}
+        for lang, data in reused.items()
+    }
+
+
 def translate_event(event) -> None:
     """Translate event title and description to all supported languages."""
     from market.models import EventTranslation
+
+    existing_langs = set(
+        EventTranslation.objects.filter(event_id=event.id).values_list("language", flat=True)
+    )
+    reusable = _reuse_event_translations_by_title(event) if event.title else {}
 
     for lang in SUPPORTED_LANGUAGES:
         if lang == "en":
             continue
         # Skip if translation already exists
-        if EventTranslation.objects.filter(event_id=event.id, language=lang).exists():
+        if lang in existing_langs:
+            continue
+
+        reused = reusable.get(lang)
+        if reused:
+            description = reused.get("description")
+            if description is None and event.description:
+                description = translate_text(event.description, lang)
+            EventTranslation.objects.create(
+                event_id=event.id,
+                language=lang,
+                title=reused["title"],
+                description=description,
+            )
+            continue
+
+        finance_translation = get_finance_translation(event, lang)
+        if finance_translation:
+            EventTranslation.objects.create(
+                event_id=event.id,
+                language=lang,
+                title=finance_translation["title"],
+                description=finance_translation.get("description"),
+            )
             continue
 
         title = translate_text(event.title, lang) if event.title else None

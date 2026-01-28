@@ -74,6 +74,8 @@ def serialize_event(event: Event, lang: str = "en", include_all_translations: bo
 
     title = event.title
     description = event.description
+    event_title = event.title
+    event_description = event.description
 
     # Build translations dict for all languages
     translations = {}
@@ -107,6 +109,17 @@ def serialize_event(event: Event, lang: str = "en", include_all_translations: bo
             except EventTranslation.DoesNotExist:
                 pass
 
+        if title == event_title:
+            try:
+                from .translation import get_finance_translation
+                finance_translation = get_finance_translation(event, lang)
+                if finance_translation:
+                    title = finance_translation["title"]
+                    if finance_translation.get("description"):
+                        description = finance_translation["description"]
+            except Exception:
+                pass
+
     result = {
         "id": str(event.id),
         "title": title,
@@ -137,6 +150,13 @@ def serialize_event(event: Event, lang: str = "en", include_all_translations: bo
         "team_b_color": getattr(event, "team_b_color", None) or "#ef4444",
         "allows_draw": getattr(event, "allows_draw", False),
     }
+
+    if lang != "en" and title != event_title and market_payload:
+        for market in market_payload:
+            if market.get("title") == event_title:
+                market["title"] = title
+            if description and market.get("description") == event_description:
+                market["description"] = description
 
     if include_all_translations and translations:
         result["translations"] = translations
