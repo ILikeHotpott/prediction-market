@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import Toast from "@/components/Toast"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { usePortfolio } from "@/components/PortfolioProvider"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { useLanguage } from "@/components/LanguageProvider"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
 
@@ -19,6 +19,7 @@ const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:800
 
 export default function MarketDetail({ params }) {
   const routeParams = useParams()
+  const router = useRouter()
   const { user, openAuthModal } = useAuth()
   const { refreshPortfolio } = usePortfolio()
   const { locale } = useLanguage()
@@ -167,7 +168,14 @@ export default function MarketDetail({ params }) {
       url.searchParams.set("include_translations", "0")
       const res = await fetch(url.toString(), { cache: "no-store" })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to load event")
+      if (!res.ok) {
+        const redirectId = data?.redirect_event_id
+        if (redirectId && normalizeId(redirectId) !== normalizeId(marketId)) {
+          router.replace(`/market/${redirectId}`)
+          return
+        }
+        throw new Error(data.error || "Failed to load event")
+      }
       setEventData(data)
       const eventMarkets = data.markets || []
       const groupRule = (data.group_rule || "").toLowerCase()

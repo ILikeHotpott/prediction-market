@@ -96,6 +96,45 @@ def _delete_event_index_async(event_id: str):
     except Exception as e:
         logger.warning("Failed to delete event %s from index: %s", event_id, e)
 
+
+def _find_latest_finance_event_id(event_id: str) -> Optional[str]:
+    now = timezone.now()
+    window = (
+        FinanceMarketWindow.objects.select_related("event", "market")
+        .filter(event_id=event_id)
+        .first()
+    )
+    if not window:
+        return None
+
+    latest = (
+        FinanceMarketWindow.objects.select_related("event", "market")
+        .filter(
+            asset_symbol=window.asset_symbol,
+            interval=window.interval,
+            window_end__gt=now,
+            close_price__isnull=True,
+            event__is_hidden=False,
+            event__status="active",
+            market__status="active",
+        )
+        .order_by("-window_start")
+        .first()
+    )
+    if not latest:
+        return None
+    if str(latest.event_id) == str(event_id):
+        return None
+    return str(latest.event_id)
+
+
+def _finance_window_expired(event_id: str) -> bool:
+    window = FinanceMarketWindow.objects.filter(event_id=event_id).first()
+    if not window:
+        return False
+    now = timezone.now()
+    return window.close_price is not None or window.window_end <= now
+
 ALLOWED_EVENT_STATUSES = {
     "draft",
     "pending",
@@ -577,10 +616,27 @@ def get_event(request, event_id):
 
     cached = get_cached_event_detail(str(event_id), lang, include_translations)
     if cached is not None:
+        user = get_user_from_request(request)
+        is_admin = bool(user and user.role == "admin")
+        if not is_admin and _finance_window_expired(str(event_id)):
+            redirect_id = _find_latest_finance_event_id(str(event_id))
+            _delete_event_index_async(str(event_id))
+            if redirect_id:
+                return JsonResponse(
+                    {"error": "Event not available", "redirect_event_id": redirect_id},
+                    status=404,
+                )
         # Still need to check permissions for hidden events
         if cached.get("status") != "active" or cached.get("is_hidden"):
-            user = get_user_from_request(request)
-            if not (user and user.role == "admin"):
+            if not is_admin:
+                redirect_id = _find_latest_finance_event_id(str(event_id))
+                if _finance_window_expired(str(event_id)):
+                    _delete_event_index_async(str(event_id))
+                if redirect_id:
+                    return JsonResponse(
+                        {"error": "Event not available", "redirect_event_id": redirect_id},
+                        status=404,
+                    )
                 return JsonResponse({"error": "Event not available"}, status=404)
         if cached.get("finance"):
             cached = dict(cached)
@@ -615,9 +671,27 @@ def get_event(request, event_id):
     except Event.DoesNotExist:
         return JsonResponse({"error": "Event not found"}, status=404)
 
+    user = get_user_from_request(request)
+    is_admin = bool(user and user.role == "admin")
+    if not is_admin and _finance_window_expired(str(event_id)):
+        redirect_id = _find_latest_finance_event_id(str(event_id))
+        _delete_event_index_async(str(event_id))
+        if redirect_id:
+            return JsonResponse(
+                {"error": "Event not available", "redirect_event_id": redirect_id},
+                status=404,
+            )
+
     if event.status != "active" or event.is_hidden:
-        user = get_user_from_request(request)
-        if not (user and user.role == "admin"):
+        if not is_admin:
+            redirect_id = _find_latest_finance_event_id(str(event_id))
+            if _finance_window_expired(str(event_id)):
+                _delete_event_index_async(str(event_id))
+            if redirect_id:
+                return JsonResponse(
+                    {"error": "Event not available", "redirect_event_id": redirect_id},
+                    status=404,
+                )
             return JsonResponse({"error": "Event not available"}, status=404)
 
     result = serialize_event(event, lang, include_all_translations=include_translations)

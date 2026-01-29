@@ -43,9 +43,30 @@ def search(request):
             limit=limit,
             offset=offset,
         )
+        hits = result.get("hits", [])
+        now_ts = timezone.now().timestamp()
+        filtered_hits = []
+        expired_ids = []
+        for hit in hits:
+            category = (hit.get("category") or "").strip().lower()
+            deadline = hit.get("trading_deadline")
+            if category == "finance" and deadline is not None:
+                try:
+                    if float(deadline) <= now_ts:
+                        expired_ids.append(hit.get("id"))
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            filtered_hits.append(hit)
+        for event_id in expired_ids:
+            if event_id:
+                try:
+                    search_service.delete_event(str(event_id))
+                except Exception:
+                    pass
         return JsonResponse({
-            "results": result.get("hits", []),
-            "total": result.get("estimatedTotalHits", 0),
+            "results": filtered_hits,
+            "total": max(len(filtered_hits), (result.get("estimatedTotalHits", 0) - len(expired_ids))),
             "query": query,
         })
     except Exception as e:
