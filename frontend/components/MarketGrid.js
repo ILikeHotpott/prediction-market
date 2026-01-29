@@ -165,41 +165,49 @@ export default function MarketGrid() {
   })
   const [watchedIds, setWatchedIds] = useState(new Set())
   const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const hasFetched = useRef(false)
   const isTogglingRef = useRef(false)
 
   // Set mounted flag after hydration
   useEffect(() => {
     setMounted(true)
-    // Start fetching immediately with locale
-    fetchEventsData(category, locale, resolvedFinanceInterval, financeAsset).then((data) => {
-      setMarkets(data)
-      if (data.length > 0 && locale === "en") {
-        setCachedEvents(category, resolvedFinanceInterval, financeAsset, data)
-      }
-    }).catch(() => {})
-    // Prefetch other categories (only for English)
+  }, [])
+
+  // Fetch markets whenever filters/locale change
+  useEffect(() => {
+    if (!mounted) return
+    let active = true
+    const cached = locale === "en"
+      ? getCachedEvents(category, resolvedFinanceInterval, financeAsset)
+      : null
+    if (cached) setMarkets(cached)
+    setLoading(!cached || cached.length === 0)
+    fetchEventsData(category, locale, resolvedFinanceInterval, financeAsset)
+      .then((data) => {
+        if (!active) return
+        setMarkets(data)
+        if (data.length > 0 && locale === "en") {
+          setCachedEvents(category, resolvedFinanceInterval, financeAsset, data)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!active) return
+        setLoading(false)
+        setHasLoaded(true)
+      })
+    return () => { active = false }
+  }, [category, locale, mounted, resolvedFinanceInterval, financeAsset])
+
+  useEffect(() => {
+    if (!mounted) return
     if (!hasFetched.current && locale === "en") {
       hasFetched.current = true
       setTimeout(prefetchAllCategories, 100)
     }
-  }, [locale])
-
-  // Handle category or locale changes after initial mount
-  useEffect(() => {
-    if (!mounted) return
-    // Only use cache for English
-    if (locale === "en") {
-      const cached = getCachedEvents(category, resolvedFinanceInterval, financeAsset)
-      if (cached) setMarkets(cached)
-    }
-    fetchEventsData(category, locale, resolvedFinanceInterval, financeAsset).then((data) => {
-      setMarkets(data)
-      if (data.length > 0 && locale === "en") {
-        setCachedEvents(category, resolvedFinanceInterval, financeAsset, data)
-      }
-    }).catch(() => {})
-  }, [category, locale, mounted, resolvedFinanceInterval, financeAsset])
+  }, [locale, mounted])
 
   useEffect(() => {
     if (user) fetchWatchlist()
@@ -248,8 +256,8 @@ export default function MarketGrid() {
     }
   }, [user])
 
-  // Show skeleton cards only when not mounted yet
-  const showSkeleton = !mounted
+  // Show skeleton cards during initial load or when fetching with empty cache
+  const showSkeleton = !mounted || (loading && markets.length === 0)
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 lg:mt-6 pb-16 relative">
@@ -275,7 +283,7 @@ export default function MarketGrid() {
             )}
           </div>
 
-          {mounted && markets.length === 0 && (
+          {hasLoaded && !loading && markets.length === 0 && (
             <div className="text-center text-muted-foreground py-20 font-display text-xl">No markets available</div>
           )}
         </div>

@@ -159,6 +159,16 @@ a,
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
 }
 
+.skeleton.skeleton--emerald {
+  background: linear-gradient(
+    90deg,
+    rgba(60, 96, 76, 0.35) 20%,
+    rgba(60, 96, 76, 0.55) 35%,
+    rgba(60, 96, 76, 0.35) 55%
+  );
+  background-size: 200% 100%;
+}
+
 @keyframes skeleton-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

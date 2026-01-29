@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import useFinancePriceStream from "@/hooks/useFinancePriceStream"
+import { ChartSkeleton } from "@/components/MarketChart"
 
 const MAX_POINTS = 900
 const DISPLAY_WINDOW_MS = 180000
@@ -46,6 +47,9 @@ function FlipPrice({ value }) {
 
 export default function FinanceMarketChart({ finance, serverTime, nextEventId }) {
   const symbol = finance?.asset_symbol
+  if (!finance || !symbol) {
+    return <ChartSkeleton className="md:mt-4" />
+  }
   const titleText = useMemo(() => {
     const name = finance?.asset_name || symbol
     return name ? `${name} Up or Down` : "Up or Down"

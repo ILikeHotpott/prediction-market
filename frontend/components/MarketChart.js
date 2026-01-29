@@ -80,6 +80,16 @@ function fetchInBackground(marketIds, interval, key) {
   pending.set(key, promise)
 }
 
+export function ChartSkeleton({ className = "" }) {
+  return (
+    <div className={`bg-background rounded-2xl p-6 ${className}`}>
+      <div className="h-8 w-64 bg-white/10 rounded animate-pulse mb-2" />
+      <div className="h-12 w-24 bg-white/10 rounded animate-pulse mb-4" />
+      <div className="h-[300px] bg-white/5 rounded animate-pulse" />
+    </div>
+  )
+}
+
 export default function MarketChartRecharts({
   market,
   eventId,
@@ -265,13 +275,7 @@ export default function MarketChartRecharts({
   const prob = chartData.lines[0]?.prob ?? chartData.points?.at(-1)?.value
 
   if (loading) {
-    return (
-      <div className="bg-background rounded-2xl p-6">
-        <div className="h-8 w-64 bg-white/10 rounded animate-pulse mb-2" />
-        <div className="h-12 w-24 bg-white/10 rounded animate-pulse mb-4" />
-        <div className="h-[300px] bg-white/5 rounded animate-pulse" />
-      </div>
-    )
+    return <ChartSkeleton />
   }
 
   return (

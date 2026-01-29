@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState, useRef, useCallback } from "rea
 import { CheckCircle2 } from "lucide-react"
 import Navigation from "@/components/Navigation"
 import MobileBottomNav from "@/components/MobileBottomNav"
-import MarketChart from "@/components/MarketChart"
+import MarketChart, { ChartSkeleton } from "@/components/MarketChart"
 import FinanceMarketChart from "@/components/FinanceMarketChart"
 import Comments from "@/components/Comments"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -687,23 +687,17 @@ export default function MarketDetail({ params }) {
       />
       <div className="flex-1 overflow-y-auto lg:overflow-hidden">
         <div className="max-w-[1400px] mx-auto lg:px-12 h-full">
-        {loading && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-4">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
-                <Skeleton className="h-6 w-2/3 mb-4" />
-                <Skeleton className="h-10 w-32 mb-4" />
-                <Skeleton className="h-[280px] w-full rounded-lg" />
-              </div>
-            </div>
-            <div className="space-y-6">
-              <div className="bg-[#f9f6ee] rounded-2xl border border-[#e6ddcb] p-6">
-                <Skeleton className="h-14 w-full rounded-xl" />
-              </div>
-            </div>
-          </div>
-        )}
         {!loading && error && <div className="text-red-400 mb-4 px-4">{error}</div>}
+        {(loading || !eventData) && !error && (
+          <>
+            <div className="lg:hidden bg-[#446f55] px-4 pt-4">
+              <ChartSkeleton />
+            </div>
+            <div className="hidden lg:block px-4 lg:px-0 lg:pt-4">
+              <ChartSkeleton />
+            </div>
+          </>
+        )}
         {!loading && eventData && isMultiEvent && !visibleMarkets.length && (
           <div className="px-4 py-10 text-slate-600">
             All outcomes are settled for this event.
