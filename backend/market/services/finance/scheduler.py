@@ -147,6 +147,45 @@ def _build_description(asset_symbol: str, window_start: datetime, window_end: da
     )
 
 
+def _build_search_doc(
+    *,
+    event: Event,
+    market: Optional[Market],
+    outcomes: list,
+    volume_total: float = 0,
+) -> dict:
+    return {
+        "id": str(event.id),
+        "title": event.title,
+        "description": event.description or "",
+        "category": event.category or "",
+        "status": event.status,
+        "cover_url": event.cover_url,
+        "created_at": event.created_at.timestamp() if event.created_at else 0,
+        "trading_deadline": event.trading_deadline.timestamp() if event.trading_deadline else 0,
+        "volume_total": volume_total,
+        "market_id": str(market.id) if market else None,
+        "outcomes": outcomes,
+    }
+
+
+def _index_finance_event_doc(doc: dict) -> None:
+    try:
+        from ..search import index_event
+        index_event(doc)
+    except Exception as exc:
+        logger.warning("Failed to index finance event %s: %s", doc.get("id"), exc)
+
+
+@sync_to_async
+def _delete_event_from_search(event_id: str) -> None:
+    try:
+        from ..search import delete_event
+        delete_event(event_id)
+    except Exception as exc:
+        logger.warning("Failed to delete finance event %s from search: %s", event_id, exc)
+
+
 @sync_to_async
 def _create_finance_event_market(
     *,
@@ -159,12 +198,54 @@ def _create_finance_event_market(
     asset_name: str,
     asset_type: str,
 ) -> Optional[FinanceMarketWindow]:
-    if FinanceMarketWindow.objects.filter(
-        asset_symbol=asset_symbol,
-        interval=interval_key,
-        window_start=window_start,
-    ).exists():
-        return None
+    existing = (
+        FinanceMarketWindow.objects.select_related("event", "market")
+        .filter(
+            asset_symbol=asset_symbol,
+            interval=interval_key,
+            window_start=window_start,
+        )
+        .first()
+    )
+    if existing:
+        event = existing.event
+        market = existing.market
+        now = timezone.now()
+        if (
+            event
+            and market
+            and not event.is_hidden
+            and event.status == "active"
+            and market.status == "active"
+            and existing.window_end > now
+        ):
+            stats = list(MarketOptionStats.objects.filter(market_id=market.id))
+            options = list(MarketOption.objects.filter(market_id=market.id))
+            volume_total = sum(float(s.volume_total or 0) for s in stats)
+            outcomes = []
+            for opt in options:
+                stat = next((s for s in stats if s.option_id == opt.id), None)
+                outcomes.append({
+                    "id": opt.id,
+                    "name": opt.title,
+                    "probability_bps": stat.prob_bps if stat else 0,
+                })
+
+            search_doc = _build_search_doc(
+                event=event,
+                market=market,
+                outcomes=outcomes,
+                volume_total=volume_total,
+            )
+            _index_finance_event_doc(search_doc)
+        else:
+            if event:
+                try:
+                    from ..search import delete_event
+                    delete_event(str(event.id))
+                except Exception as exc:
+                    logger.warning("Failed to delete stale finance event %s: %s", event.id, exc)
+        return existing
 
     title = _build_title(asset_name, interval_key)
     description = _build_description(asset_symbol, window_start, window_end)
@@ -248,6 +329,18 @@ def _create_finance_event_market(
             updated_at=now,
         )
 
+        prob_by_option_id = {stat.option_id: stat.prob_bps for stat in stats}
+        outcomes = [
+            {
+                "id": opt.id,
+                "name": opt.title,
+                "probability_bps": prob_by_option_id.get(opt.id, 0),
+            }
+            for opt in created_options
+        ]
+        search_doc = _build_search_doc(event=event, market=market, outcomes=outcomes, volume_total=0)
+        transaction.on_commit(lambda: _index_finance_event_doc(search_doc))
+
     try:
         from ..translation import translate_event
         translate_event(event)
@@ -277,6 +370,11 @@ def _settle_window(window_id: int, close_price: Decimal) -> None:
     window.updated_at = timezone.now()
     window.save(update_fields=["close_price", "updated_at"])
     invalidate_event_detail(str(window.event_id))
+    try:
+        from ..search import delete_event
+        delete_event(str(window.event_id))
+    except Exception as exc:
+        logger.warning("Failed to delete settled finance event %s from search: %s", window.event_id, exc)
 
 
 def _ensure_finance_settlement_funding(market_id, winning_option_index: int) -> None:
@@ -326,7 +424,7 @@ def _due_windows(now: datetime):
         FinanceMarketWindow.objects.select_related("market")
         .filter(window_end__lte=now, close_price__isnull=True)
         .exclude(market__status__in=["resolved", "canceled"])
-        .values("id", "asset_symbol")
+        .values("id", "asset_symbol", "event_id", "interval", "window_start")
     )
 
 
@@ -334,6 +432,7 @@ class FinanceMarketScheduler:
     def __init__(self, store: PriceStore, interval_seconds: float = 1.0) -> None:
         self.store = store
         self.interval_seconds = interval_seconds
+        self._indexed_windows = set()
 
     async def run(self) -> None:
         while True:
@@ -366,7 +465,7 @@ class FinanceMarketScheduler:
                 prev_close = prev_close or latest_price
 
                 try:
-                    await _create_finance_event_market(
+                    window = await _create_finance_event_market(
                         asset_symbol=symbol,
                         interval_key=interval_key,
                         window_start=window_start,
@@ -376,6 +475,9 @@ class FinanceMarketScheduler:
                         asset_name=asset["name"],
                         asset_type=asset["type"],
                     )
+                    key = (symbol, interval_key, window_start)
+                    if window:
+                        self._indexed_windows.add(key)
                 except Exception as exc:
                     logger.warning(
                         "Failed to create finance window %s %s %s: %s",
@@ -388,6 +490,10 @@ class FinanceMarketScheduler:
     async def _settle_due(self, now: datetime) -> None:
         due = await _due_windows(now)
         for row in due:
+            if row.get("event_id"):
+                await _delete_event_from_search(str(row["event_id"]))
+            key = (row["asset_symbol"], row["interval"], row["window_start"])
+            self._indexed_windows.discard(key)
             symbol = row["asset_symbol"]
             latest_price = await self.store.get_price_value(symbol)
             if latest_price is None:

@@ -1,8 +1,10 @@
 from django.http import JsonResponse
+from django.db.models import Q
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
-from market.models import Event, Market, MarketOption, MarketOptionStats
+from market.models import Event, Market, MarketOption, MarketOptionStats, FinanceMarketWindow
 from market.services import search as search_service
 
 
@@ -55,7 +57,21 @@ def search(request):
 def reindex_events(request):
     """Reindex all events to Meilisearch. Admin only."""
     try:
-        events = Event.objects.filter(is_hidden=False).select_related("primary_market")
+        now = timezone.now()
+        finance_active_ids = list(
+            FinanceMarketWindow.objects.filter(
+                window_end__gt=now,
+                close_price__isnull=True,
+            ).values_list("event_id", flat=True)
+        )
+        events = (
+            Event.objects.filter(is_hidden=False, status="active")
+            .filter(
+                Q(category__iexact="finance", id__in=finance_active_ids)
+                | ~Q(category__iexact="finance")
+            )
+            .select_related("primary_market")
+        )
         docs = []
         for event in events:
             market = event.primary_market

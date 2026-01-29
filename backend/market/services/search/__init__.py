@@ -1,4 +1,5 @@
 import os
+import logging
 import meilisearch
 
 MEILI_HOST = os.getenv("MEILISEARCH_HOST", "http://localhost:7700")
@@ -7,6 +8,15 @@ MEILI_KEY = os.getenv("MEILISEARCH_API_KEY") or None
 INDEX_NAME = "events"
 
 _client = None
+_settings_checked = False
+
+_INDEX_SETTINGS = {
+    "searchableAttributes": ["title", "description", "category"],
+    "filterableAttributes": ["status", "category"],
+    "sortableAttributes": ["created_at", "trading_deadline", "volume_total"],
+}
+
+logger = logging.getLogger(__name__)
 
 
 def get_client():
@@ -17,19 +27,24 @@ def get_client():
 
 
 def get_index():
+    global _settings_checked
     client = get_client()
     try:
-        return client.get_index(INDEX_NAME)
+        index = client.get_index(INDEX_NAME)
     except meilisearch.errors.MeilisearchApiError:
         task = client.create_index(INDEX_NAME, {"primaryKey": "id"})
         client.wait_for_task(task.task_uid)
         index = client.get_index(INDEX_NAME)
-        index.update_settings({
-            "searchableAttributes": ["title", "description", "category"],
-            "filterableAttributes": ["status", "category"],
-            "sortableAttributes": ["created_at", "trading_deadline", "volume_total"],
-        })
-        return index
+        _settings_checked = False
+
+    if not _settings_checked:
+        try:
+            task = index.update_settings(_INDEX_SETTINGS)
+            client.wait_for_task(task.task_uid)
+        except Exception as exc:
+            logger.warning("Failed to update meilisearch index settings: %s", exc)
+        _settings_checked = True
+    return index
 
 
 def index_event(event_data: dict):

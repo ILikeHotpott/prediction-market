@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Tuple, Optional
 
 from django.db import transaction
-from django.db.models import Prefetch, Count
+from django.db.models import Prefetch, Count, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -37,12 +37,22 @@ def _reindex_all_events_async():
     """Reindex all events to meilisearch (fire and forget)."""
     try:
         from ..services.search import index_events
-        # Only index active/closed/resolved events; exclude canceled/draft/pending
-        # to avoid re-adding events that were explicitly deleted from the index
-        events = Event.objects.filter(
-            is_hidden=False,
-            status__in=["active", "closed", "resolved"],
-        ).select_related("primary_market")
+        now = timezone.now()
+        finance_active_ids = list(
+            FinanceMarketWindow.objects.filter(
+                window_end__gt=now,
+                close_price__isnull=True,
+            ).values_list("event_id", flat=True)
+        )
+        # Only index active events; exclude expired finance windows to avoid stale search hits.
+        events = (
+            Event.objects.filter(is_hidden=False, status="active")
+            .filter(
+                Q(category__iexact="finance", id__in=finance_active_ids)
+                | ~Q(category__iexact="finance")
+            )
+            .select_related("primary_market")
+        )
         docs = []
         for event in events:
             market = event.primary_market
