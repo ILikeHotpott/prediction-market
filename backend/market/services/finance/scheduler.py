@@ -187,6 +187,48 @@ def _delete_event_from_search(event_id: str) -> None:
 
 
 @sync_to_async
+def _index_latest_active_window(asset_symbol: str, interval_key: str) -> None:
+    now = timezone.now()
+    window = (
+        FinanceMarketWindow.objects.select_related("event", "market")
+        .filter(
+            asset_symbol=asset_symbol,
+            interval=interval_key,
+            window_end__gt=now,
+            close_price__isnull=True,
+            event__is_hidden=False,
+            event__status="active",
+            market__status="active",
+        )
+        .order_by("-window_start")
+        .first()
+    )
+    if not window or not window.event or not window.market:
+        return
+
+    market = window.market
+    stats = list(MarketOptionStats.objects.filter(market_id=market.id))
+    options = list(MarketOption.objects.filter(market_id=market.id))
+    volume_total = sum(float(s.volume_total or 0) for s in stats)
+    outcomes = []
+    for opt in options:
+        stat = next((s for s in stats if s.option_id == opt.id), None)
+        outcomes.append({
+            "id": opt.id,
+            "name": opt.title,
+            "probability_bps": stat.prob_bps if stat else 0,
+        })
+
+    search_doc = _build_search_doc(
+        event=window.event,
+        market=market,
+        outcomes=outcomes,
+        volume_total=volume_total,
+    )
+    _index_finance_event_doc(search_doc)
+
+
+@sync_to_async
 def _create_finance_event_market(
     *,
     asset_symbol: str,
@@ -492,6 +534,7 @@ class FinanceMarketScheduler:
         for row in due:
             if row.get("event_id"):
                 await _delete_event_from_search(str(row["event_id"]))
+                await _index_latest_active_window(row["asset_symbol"], row["interval"])
             key = (row["asset_symbol"], row["interval"], row["window_start"])
             self._indexed_windows.discard(key)
             symbol = row["asset_symbol"]

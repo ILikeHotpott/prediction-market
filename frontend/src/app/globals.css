@@ -1,11 +1,15 @@
 
-@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Rye&family=Roboto+Slab:wght@400;700&family=Open+Sans:wght@400;500;600;700&family=Noto+Sans:wght@400;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --font-sans-fallback: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-emphasis: 500;
+  --font-weight-strong: 600;
+
   /* Felt table base */
   --app-background: #446f55; /* Slightly deeper felt */
   --background: var(--app-background);
@@ -86,11 +90,17 @@
 body {
   background-color: var(--app-background);
   color: var(--foreground);
-  font-family: 'Noto Sans', serif; /* Unified serif font for entertainment vibe */
+  font-family: var(--font-sans, var(--font-sans-fallback));
+  font-weight: var(--font-weight-regular);
 }
 
 h1, h2, h3, h4, h5, h6, .font-display {
-  font-family: 'Noto Sans', serif; /* Special font for headers/accents */
+  font-family: var(--font-sans, var(--font-sans-fallback));
+  font-weight: var(--font-weight-emphasis);
+}
+
+code, pre, kbd, samp {
+  font-family: var(--font-sans, var(--font-sans-fallback));
 }
 
 /* Custom scrollbar styles */
@@ -311,7 +321,7 @@ a,
 }
 
 .chance-gauge__percent {
-  font-weight: 800;
+  font-weight: var(--font-weight-emphasis);
   color: #1f2937;
   font-size: 15px;
 }
@@ -349,7 +359,7 @@ a,
 }
 
 .market-card-label {
-  font-weight: 700;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   font-size: 11px;
@@ -358,7 +368,7 @@ a,
 .market-card-title {
   flex: 1;
   font-size: 17px;
-  font-weight: 700;
+  font-weight: var(--font-weight-strong);
   line-height: 1.3;
   color: #1f2937;
   text-shadow:
@@ -420,13 +430,13 @@ a,
 }
 
 .binary-outcome__name {
-  font-weight: 700;
+  font-weight: var(--font-weight-emphasis);
   color: #1f2937;
   font-size: 15px;
 }
 
 .binary-outcome__prob {
-  font-weight: 800;
+  font-weight: var(--font-weight-emphasis);
   color: #1f2937;
   font-size: 20px;
 }
@@ -467,12 +477,16 @@ a,
   margin-top: 12px;
 }
 
+.market-card-actions .market-chip {
+  font-weight: var(--font-weight-strong);
+}
+
 .market-chip {
   position: relative;
   width: 100%;
   border-radius: 14px;
   border: 1px solid #d7cbb4;
-  font-weight: 800;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   padding: 13px 17px;
@@ -518,7 +532,7 @@ a,
   padding: 6px 12px;
   font-size: 11px;
   min-width: 50px;
-  font-weight: 700;
+  font-weight: var(--font-weight-emphasis);
 }
 
 .market-outcome-list {
@@ -561,7 +575,7 @@ a,
   flex: 1;
   min-width: 0;
   color: #2f2a1f;
-  font-weight: 600;
+  font-weight: var(--font-weight-emphasis);
   font-size: 15px;
   white-space: nowrap;
   overflow: hidden;
@@ -582,7 +596,7 @@ a,
 .market-outcome-prob {
   width: 50px;
   text-align: right;
-  font-weight: 700;
+  font-weight: var(--font-weight-emphasis);
   font-size: 16px;
   color: #1f2937;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
@@ -628,7 +642,7 @@ a,
 }
 
 .market-volume {
-  font-weight: 600;
+  font-weight: var(--font-weight-emphasis);
   letter-spacing: 0.02em;
   font-size: 11px;
   white-space: nowrap;
@@ -910,6 +924,31 @@ a,
   }
 }
 
+@layer utilities {
+  .font-thin,
+  .font-extralight,
+  .font-light,
+  .font-normal {
+    font-weight: var(--font-weight-regular);
+  }
+
+  .font-medium,
+  .font-semibold,
+  .font-bold,
+  .font-extrabold,
+  .font-black {
+    font-weight: var(--font-weight-emphasis);
+  }
+
+  .font-mono {
+    font-family: var(--font-sans, var(--font-sans-fallback));
+  }
+
+  .font-strong {
+    font-weight: var(--font-weight-strong);
+  }
+}
+
 /* Match Card Styles */
 .market-card--match {
   height: 200px;
@@ -963,7 +1002,7 @@ a,
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--font-weight-emphasis);
   color: #fff;
   border: 2px solid #f9f6ee;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -972,7 +1011,7 @@ a,
 
 .match-team-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: var(--font-weight-emphasis);
   color: #1f2937;
   white-space: nowrap;
   overflow: hidden;
@@ -981,7 +1020,7 @@ a,
 
 .match-team-prob {
   font-size: 16px;
-  font-weight: 800;
+  font-weight: var(--font-weight-emphasis);
   color: #1f2937;
   flex-shrink: 0;
   min-width: 45px;

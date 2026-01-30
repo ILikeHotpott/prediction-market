@@ -282,8 +282,16 @@ export default function MarketChartRecharts({
     <div className="bg-background lg:rounded-2xl lg:mt-4 overflow-hidden">
       <div className={`px-4 lg:px-6 transition-all duration-300 lg:pt-5 lg:pb-4 ${scrolled ? 'pt-3 pb-2' : 'pt-5 pb-4'}`}>
         <div className={`flex items-center mb-2 transition-all duration-300 lg:gap-3 ${scrolled ? 'gap-2' : 'gap-3'}`}>
-          {coverUrl && <img src={coverUrl} alt="" className={`rounded-lg object-cover transition-all duration-300 lg:w-12 lg:h-12 ${scrolled ? 'w-8 h-8' : 'w-12 h-12'}`} />}
-          <h2 className={`font-bold text-white lg:text-xl transition-all duration-300 ${scrolled ? 'text-base' : 'text-xl'}`}>{eventTitle || market?.title}</h2>
+          {coverUrl && (
+            <img
+              src={coverUrl}
+              alt=""
+              className={`rounded-lg object-cover transition-all duration-300 ${scrolled ? 'w-10 h-10 lg:w-12 lg:h-12' : 'w-14 h-14 lg:w-16 lg:h-16'}`}
+            />
+          )}
+          <h2 className={`font-bold text-white transition-all duration-300 ${scrolled ? 'text-lg lg:text-xl' : 'text-2xl lg:text-2xl'}`}>
+            {eventTitle || market?.title}
+          </h2>
         </div>
         <div className="flex items-baseline gap-3">
           <span className="text-4xl font-bold text-white">{prob != null ? `${prob.toFixed(0)}%` : "—"}</span>

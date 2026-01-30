@@ -8,6 +8,35 @@ from market.models import Event, Market, MarketOption, MarketOptionStats, Financ
 from market.services import search as search_service
 
 
+def _build_search_doc(event: Event, market: Market):
+    volume = 0
+    outcomes = []
+    if market:
+        stats = list(MarketOptionStats.objects.filter(market_id=market.id))
+        volume = sum(float(s.volume_total or 0) for s in stats)
+        options = list(MarketOption.objects.filter(market_id=market.id))
+        for opt in options:
+            stat = next((s for s in stats if s.option_id == opt.id), None)
+            outcomes.append({
+                "id": opt.id,
+                "name": opt.title,
+                "probability_bps": stat.prob_bps if stat else 0,
+            })
+    return {
+        "id": str(event.id),
+        "title": event.title,
+        "description": event.description or "",
+        "category": event.category or "",
+        "status": event.status,
+        "cover_url": event.cover_url,
+        "created_at": event.created_at.timestamp() if event.created_at else 0,
+        "trading_deadline": event.trading_deadline.timestamp() if event.trading_deadline else 0,
+        "volume_total": volume,
+        "market_id": str(market.id) if market else None,
+        "outcomes": outcomes,
+    }
+
+
 @require_http_methods(["GET"])
 def search(request):
     """Search events using Meilisearch."""
@@ -44,7 +73,8 @@ def search(request):
             offset=offset,
         )
         hits = result.get("hits", [])
-        now_ts = timezone.now().timestamp()
+        now = timezone.now()
+        now_ts = now.timestamp()
         filtered_hits = []
         expired_ids = []
         for hit in hits:
@@ -58,6 +88,60 @@ def search(request):
                 except (TypeError, ValueError):
                     pass
             filtered_hits.append(hit)
+        seen_ids = {str(hit.get("id")) for hit in filtered_hits if hit.get("id")}
+        if expired_ids:
+            expired_windows = (
+                FinanceMarketWindow.objects.filter(event_id__in=[eid for eid in expired_ids if eid])
+                .values("asset_symbol", "interval")
+                .distinct()
+            )
+            for window in expired_windows:
+                latest = (
+                    FinanceMarketWindow.objects.select_related("event", "market")
+                    .filter(
+                        asset_symbol=window["asset_symbol"],
+                        interval=window["interval"],
+                        window_end__gt=now,
+                        close_price__isnull=True,
+                        event__is_hidden=False,
+                        event__status="active",
+                        market__status="active",
+                    )
+                    .order_by("-window_start")
+                    .first()
+                )
+                if not latest or not latest.event or not latest.market:
+                    continue
+                doc = _build_search_doc(latest.event, latest.market)
+                if doc["id"] in seen_ids:
+                    continue
+                filtered_hits.append(doc)
+                seen_ids.add(doc["id"])
+                try:
+                    search_service.index_event(doc)
+                except Exception:
+                    pass
+        if not filtered_hits and query and (not category or category.strip().lower() == "finance"):
+            fallback_events = (
+                Event.objects.filter(
+                    is_hidden=False,
+                    status="active",
+                    category__iexact="finance",
+                )
+                .filter(Q(title__icontains=query) | Q(description__icontains=query))
+                .select_related("primary_market")[:limit]
+            )
+            for event in fallback_events:
+                market = event.primary_market
+                doc = _build_search_doc(event, market)
+                if doc["id"] in seen_ids:
+                    continue
+                filtered_hits.append(doc)
+                seen_ids.add(doc["id"])
+                try:
+                    search_service.index_event(doc)
+                except Exception:
+                    pass
         for event_id in expired_ids:
             if event_id:
                 try:

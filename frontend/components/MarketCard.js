@@ -123,10 +123,7 @@ const MarketCard = memo(function MarketCard({ market, spinKey = 0, isWatched = f
                 <span className="market-card-icon">{market.image || "📈"}</span>
               </div>
             )}
-            <h3
-              className="market-card-title"
-              style={{ fontFamily: 'Google Sans, sans-serif' }}
-            >
+            <h3 className="market-card-title">
               {displayTitle}
             </h3>
           </div>

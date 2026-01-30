@@ -401,7 +401,7 @@ export default function FinanceMarketChart({ finance, serverTime, nextEventId })
                 <span className="text-xs uppercase tracking-[0.18em] text-white/40">
                   Price to beat
                 </span>
-                <span className="text-3xl font-bold text-white/50">
+                <span className="text-3xl font-strong text-white/50">
                   {Number(baseline).toFixed(2)}
                 </span>
               </div>
@@ -410,7 +410,7 @@ export default function FinanceMarketChart({ finance, serverTime, nextEventId })
               <span className="text-xs uppercase tracking-[0.18em] text-white/50">
                 Current price
               </span>
-              <span className="text-3xl font-bold text-white">
+              <span className="text-3xl font-strong text-white">
                 <FlipPrice value={displayPrice} />
               </span>
             </div>

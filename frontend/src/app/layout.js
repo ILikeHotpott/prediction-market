@@ -1,10 +1,18 @@
 import "./globals.css";
+import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { PortfolioProvider } from "@/components/PortfolioProvider";
 import { LanguageProvider } from "@/components/LanguageProvider";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import JsonLd from "./JsonLd";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-sans",
+});
 
 export const metadata = {
   title: "Monofuture - Prediction Market",
@@ -69,7 +77,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className={inter.variable}>
       <head>
         <JsonLd />
       </head>
