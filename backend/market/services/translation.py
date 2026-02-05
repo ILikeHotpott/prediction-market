@@ -324,7 +324,7 @@ def _reuse_event_translations_by_title(event):
     }
 
 
-def translate_event(event) -> None:
+def translate_event(event, *, allow_openrouter: bool = True) -> None:
     """Translate event title and description to all supported languages."""
     from market.models import EventTranslation
 
@@ -343,7 +343,7 @@ def translate_event(event) -> None:
         reused = reusable.get(lang)
         if reused:
             description = reused.get("description")
-            if description is None and event.description:
+            if description is None and event.description and allow_openrouter:
                 description = translate_text(event.description, lang)
             EventTranslation.objects.create(
                 event_id=event.id,
@@ -361,6 +361,9 @@ def translate_event(event) -> None:
                 title=finance_translation["title"],
                 description=finance_translation.get("description"),
             )
+            continue
+
+        if not allow_openrouter:
             continue
 
         title = translate_text(event.title, lang) if event.title else None

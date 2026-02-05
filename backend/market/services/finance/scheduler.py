@@ -385,7 +385,7 @@ def _create_finance_event_market(
 
     try:
         from ..translation import translate_event
-        translate_event(event)
+        translate_event(event, allow_openrouter=False)
     except Exception as exc:
         logger.warning("Failed to auto-translate finance event %s: %s", event.id, exc)
 
