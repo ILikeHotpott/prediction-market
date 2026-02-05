@@ -1,6 +1,7 @@
 import os
 import logging
 import re
+import hashlib
 from typing import Optional
 from openai import OpenAI
 
@@ -26,12 +27,54 @@ def get_openrouter_client() -> Optional[OpenAI]:
     return OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
 
 
+def _text_cache_key(text: str, source_language: str) -> str:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return f"{source_language}:{digest}"
+
+
+def _get_cached_text_translation(
+    text: str, target_language: str, source_language: str
+) -> Optional[str]:
+    if not text:
+        return None
+    try:
+        translation = Translation.objects.get(
+            entity_type="text",
+            entity_id=_text_cache_key(text, source_language),
+            field_name="text",
+            language=target_language,
+        )
+        return translation.translated_text
+    except Translation.DoesNotExist:
+        return None
+
+
+def _save_text_translation(
+    text: str, target_language: str, source_language: str, translated_text: str
+) -> None:
+    if not text:
+        return
+    Translation.objects.update_or_create(
+        entity_type="text",
+        entity_id=_text_cache_key(text, source_language),
+        field_name="text",
+        language=target_language,
+        defaults={"translated_text": translated_text},
+    )
+
+
 def translate_text(text: str, target_language: str, source_language: str = "en") -> Optional[str]:
     """Translate text using OpenRouter."""
     if target_language == source_language:
         return text
     if target_language not in SUPPORTED_LANGUAGES:
         return None
+    if not text:
+        return text
+
+    cached = _get_cached_text_translation(text, target_language, source_language)
+    if cached:
+        return cached
 
     client = get_openrouter_client()
     if not client:
@@ -53,7 +96,10 @@ def translate_text(text: str, target_language: str, source_language: str = "en")
             temperature=0.3,
             max_tokens=1000,
         )
-        return response.choices[0].message.content.strip()
+        translated = response.choices[0].message.content.strip()
+        if translated:
+            _save_text_translation(text, target_language, source_language, translated)
+        return translated
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return None
